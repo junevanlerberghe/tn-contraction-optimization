@@ -1,0 +1,7 @@
+*pycache*
+.out
+.venv
+.tmp 
+.pytest_cache
+.vscode
+logs
