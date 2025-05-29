@@ -1,0 +1,3 @@
+[submodule "tnqec"]
+	path = tnqec
+	url = https://github.com/balopat/tnqec.git
