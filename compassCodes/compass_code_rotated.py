@@ -19,6 +19,9 @@ class CompassCodeRotatedTN(TensorNetwork):
 
         Uses the rotated surface code layout.
         """
+        self.n = d * d
+        self.d = d
+
         nodes = {
             (r, c): StabilizerCodeTensorEnumerator(
                 lego((r, c)),
@@ -33,59 +36,70 @@ class CompassCodeRotatedTN(TensorNetwork):
         last_col = d - 1
 
         # Apply stoppers to corners
+        open_legs = self.find_open_legs(custom_connections)
+        top_left_open = open_legs.get((0,0))
         nodes[(0, 0)] = (
             nodes[(0, 0)]
-            .trace_with_stopper(PAULI_Z, 0)
-            .trace_with_stopper(PAULI_X, 3)
+            .trace_with_stopper(PAULI_Z, 2 if 2 in top_left_open else 3)
+            .trace_with_stopper(PAULI_X, 3 if 2 in top_left_open else 0)
         )
+
+
+        top_right_open = open_legs.get((0, last_col))
         nodes[(0, last_col)] = (
             nodes[(0, last_col)]
-            .trace_with_stopper(PAULI_Z, 2)
-            .trace_with_stopper(PAULI_X, 3)
+            .trace_with_stopper(PAULI_Z, 1 if 1 in top_right_open else 0)
+            .trace_with_stopper(PAULI_X, 0 if 1 in top_right_open else 3)
         )
+
+        bottom_left_open = open_legs.get((last_row, 0))
         nodes[(last_row, 0)] = (
             nodes[(last_row, 0)]
-            .trace_with_stopper(PAULI_Z, 0)
-            .trace_with_stopper(PAULI_X, 1)
+            .trace_with_stopper(PAULI_Z, 3 if 3 in bottom_left_open else 2)
+            .trace_with_stopper(PAULI_X, 2 if 3 in bottom_left_open else 1)
         )
+
+        bottom_right_open = open_legs.get((last_row, last_col))
         nodes[(last_row, last_col)] = (
             nodes[(last_row, last_col)]
-            .trace_with_stopper(PAULI_Z, 2)
-            .trace_with_stopper(PAULI_X, 1)
+            .trace_with_stopper(PAULI_Z, 0 if 0 in bottom_right_open else 1)
+            .trace_with_stopper(PAULI_X, 1 if 0 in bottom_right_open else 2)
         )
 
-        #TODO: Need to find a way to generalize this, this will just be hardcoded for now
-        # go through custom connections to find if there are any legs open
-        # top/bottom boundary, if open legs add X stoppers
-        # left/right boundary, if open legs add z stoppers
-        # corners always remain the same, so leave the above
-        nodes[(1, 0)] = (
-            nodes[(1, 0)]
-            .trace_with_stopper(PAULI_Z, 1)
-        )
+        # Apply stoppers to sides
+        for c in range(1, last_col):
+            top_open = open_legs.get((0, c))
+            for leg in top_open:
+                nodes[(0, c)] = (
+                    nodes[(0, c)]
+                    .trace_with_stopper(PAULI_X, leg)
+                )
+            bottom_open = open_legs.get((last_row, c))
+            for leg in bottom_open:
+                nodes[(last_row, c)] = (
+                    nodes[(last_row, c)]
+                    .trace_with_stopper(PAULI_X, leg)
+                )
+        
+        for r in range(1, last_row):
+            left_open = open_legs.get((r, 0))
+            for leg in left_open:
+                nodes[(r, 0)] = (
+                    nodes[(r, 0)]
+                    .trace_with_stopper(PAULI_Z, leg)
+                )
 
-        nodes[(1, 2)] = (
-            nodes[(1, 2)]
-            .trace_with_stopper(PAULI_Z, 3)
-        )
-
-        nodes[(0,1)] = (
-            nodes[(0,1)]
-            .trace_with_stopper(PAULI_X, 0)
-        )
-
-        nodes[(2,1)] = (
-            nodes[(2,1)]
-            .trace_with_stopper(PAULI_X, 2)
-        )
+            right_open = open_legs.get((r, last_col))
+            for leg in right_open:
+                nodes[(r, last_col)] = (
+                    nodes[(r, last_col)]
+                    .trace_with_stopper(PAULI_Z, leg)
+                )
 
         super().__init__(nodes, truncate_length=truncate_length)
 
         for node_a, node_b, leg_a, leg_b in custom_connections:
             self.self_trace(node_a, node_b, [leg_a], [leg_b])
-
-        self.n = d * d
-        self.d = d
 
         self.set_coset(coset_error=coset_error)
     
@@ -96,4 +110,19 @@ class CompassCodeRotatedTN(TensorNetwork):
 
     def n_qubits(self):
         return self.n
+    
+    def find_open_legs(self, connections):
+        used_legs = {}
 
+        for coord1, coord2, leg1, leg2 in connections:
+            if coord1 not in used_legs:
+                used_legs[coord1] = set()
+            if coord2 not in used_legs:
+                used_legs[coord2] = set()
+            
+            used_legs[coord1].add(leg1)
+            used_legs[coord2].add(leg2)
+
+        all_legs = set(range(4))
+        open_legs = {coord: all_legs - legs for coord, legs in used_legs.items()}
+        return open_legs

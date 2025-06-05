@@ -11,10 +11,11 @@ class CompassCode():
         self.d = d
         self.coloring = coloring
         self.representations = {
-            "Tanner Network": self.tanner,
-            "Measurement State Prep": self.msp,
             "Dual Surface": self.dual_surface,
+            "Rotated Surface": self.rotated,
             "Concatenated": self.concatenated,
+            "Measurement State Prep": self.msp,
+            "Tanner Network": self.tanner
         }
 
     def h_matrix(self):
@@ -47,84 +48,43 @@ class CompassCode():
         return self.representations
     
     def make_custom_connections(self):
-        # given coloring, make custom connections
-        # start from surface code and make adjustments
-        surface_connections = set()
-        for radius in range(1, self.d):
-            for i in range(radius + 1):
-                surface_connections.add(((i, radius - 1),
-                    (i, radius),
-                    3 if (i + radius) % 2 == 0 else 2,
-                    0 if (i + radius) % 2 == 0 else 1,
-                ))
-                if i > 0 and i < radius:
-                    surface_connections.add((
-                        (i - 1, radius),
-                        (i, radius),
-                        2 if (i + radius) % 2 == 0 else 1,
-                        3 if (i + radius) % 2 == 0 else 0,
-                    ))
-
-                surface_connections.add((
-                    (radius - 1, i),
-                    (radius, i),
-                    2 if (i + radius) % 2 == 0 else 1,
-                    3 if (i + radius) % 2 == 0 else 0,
-                ))
-                if i > 0 and i < radius:
-                    surface_connections.add((
-                        (radius, i - 1),
-                        (radius, i),
-                        3 if (i + radius) % 2 == 0 else 2,
-                        0 if (i + radius) % 2 == 0 else 1,
-                    ))
-        # go through coloring to see what needs to be changed 
-        # if anything that's supposed to be an X is a 2, then change
-        # loop through coloring by 2s to loop through only Xs, if anything is a 2, then change
-
-        for row in range(self.d - 1):
-            start_col = 1 if row % 2 == 0 else 0
-            for col in range(start_col, self.d - 1, 2):
-                if self.coloring[row][col] == 2:
-                    print("twisting qubits around coord: ", row, col)
-                    # we have row and col of the stabilizer that needs to be changed
-                    top_left = (row, col)
-                    top_right = (row, col + 1)
-                    bottom_left = (row + 1, col)
-                    bottom_right = (row+1, col+1)
-
-                    hor_conn_top = (top_left, 
-                                    top_right, 
-                                    2 if (row + col) % 2 == 0 else 3,
-                                    1 if (row + col) % 2 == 0 else 0)
-                    hor_conn_bottom = (bottom_left, 
-                                       bottom_right,
-                                    3 if (row + col) % 2 == 0 else 2,
-                                    0 if (row + col) % 2 == 0 else 1)
-
-                    if(row != 0):
-                        print("removing top connection: " , hor_conn_top)
-                        surface_connections.remove(hor_conn_top)
-                    if(row != self.d - 2):
-                        print("removing bottom connection: " , hor_conn_bottom)
-                        surface_connections.remove(hor_conn_bottom)
-
-                    vert_conn_left = (top_left, 
-                                      bottom_left, 
-                                      1 if (row + col) % 2 == 0 else 2, 
-                                      0 if (row + col) % 2 == 0 else 3)
-                    vert_conn_right = (top_right, 
-                                       bottom_right, 
-                                       2 if (row + col) % 2 == 0 else 1, 
-                                       3 if (row + col) % 2 == 0 else 0)
-                    if(col != 0):
-                        print("adding left connection: " , vert_conn_left)
-                        surface_connections.add(vert_conn_left)
-                    if(col != self.d - 2):
-                        print("adding right connection: ", vert_conn_right)
-                        surface_connections.add(vert_conn_right)
-
-        return surface_connections
+        connections = set()
+        # start with connections for Shor's code
+        for row in range(self.d):
+            for col in range(self.d):
+                if(col < self.d - 1):
+                    if(row == 0):
+                        connections.add(((row, col), (row, col + 1), 0, 3))
+                    if(row == self.d - 1):
+                        connections.add(((row, col), (row, col + 1), 1, 2))
+                if(row < self.d - 1):
+                    if(col < self.d - 1):
+                        connections.add(((row, col), (row + 1, col), 1, 0))
+                    if(col > 0):
+                        connections.add(((row, col), (row + 1, col), 2, 3))
         
-        # stoppers will be adjusted in the compasscodetn itself based on these connections
-        # might still have to figure out legs somehow
+        # now change connections to adjust for the specific coloring
+        for row in range(self.d - 1):
+            for col in range(self.d - 1):
+                if(self.coloring[row][col] == 1):
+                    top_left_qubit = (row, col)
+                    top_right_qubit = (row, col + 1)
+                    bottom_left_qubit = (row + 1, col)
+                    bottom_right_qubit = (row + 1, col + 1)
+
+                    connections.remove((top_left_qubit, bottom_left_qubit, 1, 0))
+                    connections.remove((top_right_qubit, bottom_right_qubit, 2, 3))
+
+                    if(col == self.d - 2):
+                        connections.add((top_right_qubit, bottom_right_qubit, 1, 0))
+                    if(col == 0):
+                        connections.add((top_left_qubit, bottom_left_qubit, 2, 3))
+                    if(row == 0):
+                        connections.remove((top_left_qubit, top_right_qubit, 0, 3))
+                    if(row == self.d - 2):
+                        connections.remove((bottom_left_qubit, bottom_right_qubit, 1, 2))
+
+                    connections.add((top_left_qubit, top_right_qubit, 1, 2))
+                    connections.add((bottom_left_qubit, bottom_right_qubit, 0, 3))
+
+        return connections
