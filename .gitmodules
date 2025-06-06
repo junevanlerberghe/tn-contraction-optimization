@@ -1,3 +1,6 @@
 [submodule "tnqec"]
 	path = tnqec
 	url = https://github.com/balopat/tnqec.git
+[submodule "cotengra"]
+	path = cotengra
+	url = https://github.com/jcmgray/cotengra.git

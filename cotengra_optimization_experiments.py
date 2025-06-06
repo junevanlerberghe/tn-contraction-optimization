@@ -173,12 +173,16 @@ def stabilizer_enumerator_polynomial(
 
         return tn._wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count
 
+def custom(trial_dict):
+    # trial_dict: {'tree': <ContractionTree(N=18)>}
+    
+    return 1
 
-def get_contraction_time(tn):
-    tn.analyze_traces(cotengra=True, minimize="size", max_repeats=150)
+def get_contraction_time(tn, cotengra):
+    tn.analyze_traces(cotengra=cotengra, minimize=custom, max_repeats=150)
     start = time.time()
     wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count = stabilizer_enumerator_polynomial(
-        tn, verbose=False, progress_reporter=TqdmProgressReporter(), cotengra=True
+        tn, verbose=False, progress_reporter=TqdmProgressReporter(), cotengra=cotengra
     )
     end = time.time()
     return end - start, wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count
@@ -198,68 +202,123 @@ def reorder_traces_by_sparsity(tn, reverse=False):
         trace_scores.append((sparsity, trace))
 
     # sort by the sparsity (the first element of each tuple)
+    with open('test.txt', 'a') as f:
+        f.write("trace scores:\n")
+        f.write(str(trace_scores) + "\n")
+
     trace_scores.sort(key=lambda x: x[0], reverse=reverse)
 
     # extract just the traces in sorted order
     tn.traces = [t for (_, t) in trace_scores]
 
+def estimate_sparse_mult_cost(h1, h2):
+    # h1: (m x n), h2: (n x p)
+    nnz1 = np.count_nonzero(h1)
+    nnz2 = np.count_nonzero(h2)
+    rows_b = h2.shape[0]
+    if rows_b == 0:
+        return float('inf')  # avoid divide-by-zero
+    return nnz1 * (nnz2 / rows_b)
 
-def run_wep_for_sorted_traces(coloring, d):
-    compass_code = CompassCode(d, coloring)
-    tn = compass_code.concatenated()
 
-    # Run wep calculation for sorted pcm sparsity
+def reorder_traces_by_sparse_mult_cost(tn, reverse=False):
+    """
+    Reorders traces by estimated sparse multiplication cost of node.h matrices.
+    """
+    trace_scores = []
+    for trace in tn.traces:
+        node_idx1, node_idx2, *_ = trace
+        h1 = np.array(tn.nodes[node_idx1].h)
+        h2 = np.array(tn.nodes[node_idx2].h)
+
+        cost = estimate_sparse_mult_cost(h1, h2)
+        trace_scores.append((cost, trace))
+
+    trace_scores.sort(key=lambda x: x[0], reverse=reverse)
+    tn.traces = [t for (_, t) in trace_scores]
+
+
+def get_weighted_avg_sparsity(tn):
+    sparsity_info = []
+    for node_idx1, node_idx2, join_legs1, join_legs2 in tn.traces:
+        h1 = np.array(tn.nodes[node_idx1].h)
+        h2 = np.array(tn.nodes[node_idx2].h)
+        sparsity_info.append(estimate_sparse_mult_cost(h1, h2))
+
+    return round(sum((i+1) * w for i, w in enumerate(sparsity_info)), 3)
+
+
+def get_weighted_avg(tn):
     sparsity_info = []
     for node_idx1, node_idx2, join_legs1, join_legs2 in tn.traces:
         h1 = np.array(tn.nodes[node_idx1].h)
         h2 = np.array(tn.nodes[node_idx2].h)
         sparsity_info.append(np.count_nonzero(h1) + np.count_nonzero(h2))
 
-    numerator = sum((i+1) * w for i, w in enumerate(sparsity_info))
-    denominator = len(sparsity_info)
-    weighted_avg = round(numerator / denominator, 3)
-
-    reorder_traces_by_sparsity(tn)
-    contraction_time, wep, contraction_width, contraction_cost, intermediate_tensor_sizes = get_contraction_time(tn)
-    avg_intermediate_tensor_size = round(np.mean(intermediate_tensor_sizes), 3)
+    return sum((i+1) * w for i, w in enumerate(sparsity_info))
 
 
-    with open('trace_ordering_tests.csv', 'a', newline='') as csvfile:
-        writer = csv.writer(csvfile, delimiter=';')
-        writer.writerow([coloring, d, contraction_time, False, contraction_cost, contraction_width, weighted_avg, avg_intermediate_tensor_size, np.max(intermediate_tensor_sizes)])
+def run_wep_for_sorted_traces(coloring, d, num_runs=1):
+    for _ in range(num_runs):
+        compass_code = CompassCode(d, coloring)
 
-    # Run wep calculation for reverse sorted pcm sparsity
-    tn = compass_code.concatenated()
+        tn = compass_code.concatenated()
 
-    sparsity_info = []
-    for node_idx1, node_idx2, join_legs1, join_legs2 in tn.traces:
-        h1 = np.array(tn.nodes[node_idx1].h)
-        h2 = np.array(tn.nodes[node_idx2].h)
-        sparsity_info.append(np.count_nonzero(h1) + np.count_nonzero(h2))
+        weighted_avg = get_weighted_avg(tn)
+        sparsity = get_weighted_avg_sparsity(tn)
+        contraction_time, wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count = get_contraction_time(tn, False)
+        avg_intermediate_tensor_size = round(np.mean(intermediate_tensor_sizes), 3)
+
+        with open('trace_ordering_tests.csv', 'a', newline='') as csvfile:
+            writer = csv.writer(csvfile, delimiter=';')
+            writer.writerow([coloring, d, contraction_time, "default", weighted_avg, sparsity])
 
 
-    numerator = sum(i * w for i, w in enumerate(sparsity_info))
-    numerator = sum((i+1) * w for i, w in enumerate(sparsity_info))
-    denominator = len(sparsity_info)
-    
-    reorder_traces_by_sparsity(tn, reverse=True)
-    contraction_time, wep, contraction_width, contraction_cost, intermediate_tensor_sizes = get_contraction_time(tn)
-    avg_intermediate_tensor_size = round(np.mean(intermediate_tensor_sizes), 3)
+        tn = compass_code.concatenated()
+        reorder_traces_by_sparse_mult_cost(tn)
+        weighted_avg = get_weighted_avg(tn)
+        sparsity = get_weighted_avg_sparsity(tn)
+        contraction_time, wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count = get_contraction_time(tn, False)
+        avg_intermediate_tensor_size = round(np.mean(intermediate_tensor_sizes), 3)
 
-    with open('trace_ordering_tests.csv', 'a', newline='') as csvfile:
-        writer = csv.writer(csvfile, delimiter=';')
-        writer.writerow([coloring, d, contraction_time, True, contraction_cost, contraction_width, weighted_avg, avg_intermediate_tensor_size, np.max(intermediate_tensor_sizes)])
+        with open('trace_ordering_tests.csv', 'a', newline='') as csvfile:
+            writer = csv.writer(csvfile, delimiter=';')
+            writer.writerow([coloring, d, contraction_time, "sorted", weighted_avg, sparsity])
 
-    # Run wep calculation for randomly sorted pcm sparsity
-    tn = compass_code.concatenated()
+        # Run wep calculation for reverse sorted pcm sparsity
+        tn = compass_code.concatenated()
+        
+        reorder_traces_by_sparse_mult_cost(tn, reverse=True)
+        weighted_avg = get_weighted_avg(tn)
+        sparsity = get_weighted_avg_sparsity(tn)
+        contraction_time, wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count = get_contraction_time(tn, False)
+        avg_intermediate_tensor_size = round(np.mean(intermediate_tensor_sizes), 3)
 
-    
-    contraction_time, wep, contraction_width, contraction_cost, intermediate_tensor_sizes = get_contraction_time(tn)
-    avg_intermediate_tensor_size = round(np.mean(intermediate_tensor_sizes), 3)
+        with open('trace_ordering_tests.csv', 'a', newline='') as csvfile:
+            writer = csv.writer(csvfile, delimiter=';')
+            writer.writerow([coloring, d, contraction_time, "reverse sorted", weighted_avg, sparsity])
 
-    with open('trace_ordering_tests.csv', 'a', newline='') as csvfile:
-        writer = csv.writer(csvfile, delimiter=';')
-        writer.writerow([coloring, d, contraction_time, True, contraction_cost, contraction_width, weighted_avg, avg_intermediate_tensor_size, np.max(intermediate_tensor_sizes)])
+        # Run wep calculation for randomly sorted pcm sparsity
+        tn = compass_code.concatenated()
+        np.random.shuffle(tn.traces)
+        weighted_avg = get_weighted_avg(tn)
+        sparsity = get_weighted_avg_sparsity(tn)
+        contraction_time, wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count = get_contraction_time(tn, False)
+        avg_intermediate_tensor_size = round(np.mean(intermediate_tensor_sizes), 3)
+
+        with open('trace_ordering_tests.csv', 'a', newline='') as csvfile:
+            writer = csv.writer(csvfile, delimiter=';')
+            writer.writerow([coloring, d, contraction_time, "random", weighted_avg, sparsity])
+
+        # Run wep calculation with cotengra optimization
+        tn = compass_code.concatenated()
+        
+        contraction_time, wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count = get_contraction_time(tn, True)
+        avg_intermediate_tensor_size = round(np.mean(intermediate_tensor_sizes), 3)
+
+        with open('trace_ordering_tests.csv', 'a', newline='') as csvfile:
+            writer = csv.writer(csvfile, delimiter=';')
+            writer.writerow([coloring, d, contraction_time, "cotengra", -1, -1])
 
     
 
@@ -298,21 +357,28 @@ def generate_checkerboard_coloring(d):
     return [[1 + (i + j) % 2 for j in range(d-1)] for i in range(d-1)]
 
 
+with open('trace_ordering_tests.csv', 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile, delimiter=';')
+        writer.writerow(["coloring", "distance", "cotengra?", "contraction_time", "type", "# nonzero avg", "sparsity avg_2"])
+
 #### Should think about how I want to run this in the future, wrap it all up into a nice function 
     ### with an option to name the output csv file as well
-ds = [4]
-q_shors = [1.0]
+# ds = [4]
+# q_shors = [1.0]
 
-for d in ds:
-    for q_shor in q_shors:
-        coloring = generate_checkerboard_coloring(d)
-        for i in range(d - 1):
-            for j in range(d - 1):
-                if np.random.rand() < q_shor:
-                    coloring[i][j] = 2
-        run_wep_for_many_traces(coloring, d)
+# for d in ds:
+#     for q_shor in q_shors:
+#         coloring = generate_checkerboard_coloring(d)
+#         for i in range(d - 1):
+#             for j in range(d - 1):
+#                 if np.random.rand() < q_shor:
+#                     coloring[i][j] = 2
+#         run_wep_for_many_traces(coloring, d)
 
 
-# for _ in range(10):
-#     coloring = generate_checkerboard_coloring(3)
-#     run_wep_for_sorted_traces(coloring, 3)
+d = 3
+coloring = generate_checkerboard_coloring(d)
+compass = CompassCode(d, coloring)
+tn = compass.concatenated()
+#run_wep_for_sorted_traces(coloring, d, 1)
+contraction_time, wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count = get_contraction_time(tn, True)
