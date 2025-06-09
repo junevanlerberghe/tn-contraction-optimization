@@ -14,11 +14,6 @@ from qlego.stabilizer_tensor_enumerator import (
 from compassCodes.compass_code import CompassCode
 from qlego.tensor_network import _PartiallyTracedEnumerator
 
-headers = ["q_shor", "coloring", "representation", "distance", "time", "contraction cost", "avg intermediate tensor", "max tensor size", "wep"]
-#with open('wep_calcs.csv', 'w', newline='') as csvfile:
-#    writer = csv.writer(csvfile, delimiter=';')
-#    writer.writerow(headers)
-
 #with open('intermediate_info.csv', 'w', newline='') as csvfile:
 #    headers = ["q_shor", "coloring", "representation", "run #", "distance", "time", "contraction cost", "contraction width"]
 #    writer = csv.writer(csvfile, delimiter=';')
@@ -93,6 +88,7 @@ def stabilizer_enumerator_polynomial(
                 truncate_length=tn.truncate_length,
             )
 
+        total_ops_count = 0
         for node_idx1, node_idx2, join_legs1, join_legs2 in progress_reporter.iterate(
             traces, f"Tracing {len(traces)} legs", len(traces)
         ):
@@ -101,7 +97,7 @@ def stabilizer_enumerator_polynomial(
 
             if node1_pte == node2_pte:
                 # both nodes are in the same PTE!
-                pte = node1_pte.self_trace(
+                pte, ops_count = node1_pte.self_trace(
                     join_legs1=[
                         (node_idx1, leg) if isinstance(leg, int) else leg
                         for leg in join_legs1
@@ -127,7 +123,7 @@ def stabilizer_enumerator_polynomial(
                 ]
                 intermediate_tensor_sizes.append(len(pte.tensor))
             else:
-                pte = node1_pte.merge_with(
+                pte, ops_count = node1_pte.merge_with(
                     node2_pte,
                     join_legs1=[
                         (node_idx1, leg) if isinstance(leg, int) else leg
@@ -155,6 +151,7 @@ def stabilizer_enumerator_polynomial(
                 ]
                 intermediate_tensor_sizes.append(len(pte.tensor))
 
+            total_ops_count += ops_count
             node1_pte = None if node_idx1 not in tn.ptes else tn.ptes[node_idx1]
 
             for k in list(node1_pte.tensor.keys()):
@@ -178,48 +175,65 @@ def stabilizer_enumerator_polynomial(
             tn._wep = pte.tensor[()]
             tn._wep = tn._wep.normalize(verbose=verbose)
 
-        return tn._wep, contraction_width, contraction_cost, intermediate_tensor_sizes
+        return tn._wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count
 
 
 def get_contraction_time(tn):
     tn.analyze_traces(cotengra=True, minimize="combo", max_repeats=150)
     start = time.time()
-    wep, contraction_width, contraction_cost, intermediate_tensor_sizes = stabilizer_enumerator_polynomial(
+    wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count = stabilizer_enumerator_polynomial(
         tn, verbose=False, progress_reporter=TqdmProgressReporter(), cotengra=True
     )
     end = time.time()
-    return end - start, wep, contraction_width, contraction_cost, intermediate_tensor_sizes
+    return end - start, wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count
 
 
-def run_wep_calc(q_shor, num_runs, coloring, distance):
+def run_wep_calc(q_shor, num_runs, coloring, distance, file_name):
     data = []
     compass_code = CompassCode(distance, coloring)
     for name, rep in compass_code.get_representations().items():
-        total_time = 0.0
+        # MSP and Tanner Network take too long for distances > 4, so skip them
+        if(name == "Measurement State Prep" or name == "Tanner Network"):
+            if(distance > 4):
+                continue
+
+        if(name == "Concatenated"):
+            if(distance > 5):
+                continue
+
         total_contraction_width = 0
         total_contraction_cost = 0
+        total_ops = 0
         last_wep = None
+        durations = []
+
         for i in range(num_runs):
             tn = rep()
-            duration, wep, contraction_width, contraction_cost, intermediate_tensor_sizes = get_contraction_time(tn)
-            total_time += duration
+            duration, wep, contraction_width, contraction_cost, intermediate_tensor_sizes, operations = get_contraction_time(tn)
+            durations.append(duration)
             total_contraction_width += contraction_width
             total_contraction_cost += contraction_cost
+            total_ops += operations
             last_wep = wep 
 
-            with open('intermediate_info.csv', 'a', newline='') as csvfile:
-                writer = csv.writer(csvfile, delimiter=';')
-                writer.writerow([q_shor, coloring, name, i, distance, duration, contraction_cost, contraction_width])
+            #with open('intermediate_info.csv', 'a', newline='') as csvfile:
+            #    writer = csv.writer(csvfile, delimiter=';')
+            #    writer.writerow([q_shor, coloring, name, i, distance, duration, contraction_cost, contraction_width])
 
-        average_time = total_time / num_runs
-        average_contraction_width = total_contraction_width / num_runs
-        average_contraction_cost = total_contraction_cost / num_runs
-        average_tensor_size = sum(intermediate_tensor_sizes) / len(intermediate_tensor_sizes)
+        durations = np.array(durations)
+        average_time = round(np.mean(durations), 3)
+        median_time = round(np.median(durations), 3)
+        std_dev = round(np.std(durations, ddof = 1), 3)
+
+        average_contraction_width = round(total_contraction_width / num_runs, 3)
+        average_contraction_cost = round(total_contraction_cost / num_runs, 3)
+        average_operations = round(total_ops / num_runs, 3)
+        average_tensor_size = round(sum(intermediate_tensor_sizes) / len(intermediate_tensor_sizes), 3)
         max_tensor = max(intermediate_tensor_sizes)
 
-        with open('wep_calcs.csv', 'a', newline='') as csvfile:
+        with open(file_name, 'a', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter=';')
-            writer.writerow([q_shor, coloring, name, distance, average_time, average_contraction_cost, average_tensor_size, max_tensor, wep])
+            writer.writerow([q_shor, coloring, name, distance, average_time, median_time, std_dev, average_contraction_cost, average_contraction_width, average_operations, average_tensor_size, max_tensor, wep])
     
     return average_time, last_wep
 
@@ -230,9 +244,16 @@ def generate_checkerboard_coloring(d):
 
 #### Should think about how I want to run this in the future, wrap it all up into a nice function 
     ### with an option to name the output csv file as well
-num_runs = 5
-ds = [7, 8, 9, 10]
-q_shors = [0.0, 0.3, 0.5, 0.8, 1.0]
+file_name = 'wep_calcs.csv'
+
+headers = ["q_shor", "coloring", "representation", "distance", "avg time", "median time", "std dev", "contraction cost", "contraction width", "operations", "avg intermediate tensor", "max tensor size", "wep"]
+with open(file_name, 'w', newline='') as csvfile:
+    writer = csv.writer(csvfile, delimiter=';')
+    writer.writerow(headers)
+
+num_runs = 1
+ds = [3, 4, 5, 6]
+q_shors = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 
 for d in ds:
     for q_shor in q_shors:
@@ -243,4 +264,4 @@ for d in ds:
             for j in range(d - 1):
                 if np.random.rand() < q_shor:
                     coloring[i][j] = 2
-        run_wep_calc(q_shor, num_runs, coloring, d)
+        run_wep_calc(q_shor, num_runs, coloring, d, file_name)

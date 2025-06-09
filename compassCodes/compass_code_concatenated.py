@@ -41,7 +41,7 @@ class CompassCodeConcatenatedTN(TensorNetwork):
                     block_size = end_row - start_row + 1
                     last_zero_row = start_row - 1
                     next_one = next((r for r in range(end_row + 1, len(coloring)) if coloring[r][col] == 1), len(coloring) + 1)
-                    print("next one is: ", next_one)
+
                     gap_above = max(0, start_row - (last_zero_row + 1))  
                     gap_below = max(0, next_one - end_row - 1)
                     if gap_above <= gap_below:
@@ -49,7 +49,6 @@ class CompassCodeConcatenatedTN(TensorNetwork):
                         z_merge_key = ("z_merge", start_row, col)
                         nodes[z_merge_key] = StabilizerCodeTensorEnumerator(Legos.z_rep_code(block_size), idx=z_merge_key)
 
-                        print("looping to apply non-isometries at col", col, "from row", start_row, "to", end_row+1)
                         for offset, j in enumerate(range(start_row, end_row + 1)):
                             nodes[("x1", j, col)] = StabilizerCodeTensorEnumerator(Legos.x_rep_code(3), idx=("x1", j, col))
                             nodes[("z", j, col)] = StabilizerCodeTensorEnumerator(Legos.z_rep_code(3), idx=("z", j, col))
@@ -61,7 +60,6 @@ class CompassCodeConcatenatedTN(TensorNetwork):
                             qubit1, leg1 = attachments[(j, col)]
                             qubit2, leg2 = attachments[(j, col + 1)]
                             print("\t adding non-isometry between qubits", qubit1, "and", qubit2, "at row", j, "col", col)
-                            print("\t on legs", leg1, "and", leg2)
                             connections_to_trace.add((qubit1, ("x1", j, col), leg1, 2))
                             connections_to_trace.add((qubit2, ("x2", j, col), leg2, 2))
 
@@ -75,7 +73,6 @@ class CompassCodeConcatenatedTN(TensorNetwork):
                         z_merge_key = ("z_merge", end_row + 1, col)
                         nodes[z_merge_key] = StabilizerCodeTensorEnumerator(Legos.z_rep_code(extra_rows), idx=z_merge_key)
 
-                        print("looping to apply non-isometries at col", col, "from row", end_row + 1, "to", next_one)
                         for offset, j in enumerate(range(end_row + 1, next_one)):
                             nodes[("x1", j, col)] = StabilizerCodeTensorEnumerator(Legos.x_rep_code(3), idx=("x1", j, col))
                             nodes[("z", j, col)] = StabilizerCodeTensorEnumerator(Legos.z_rep_code(3), idx=("z", j, col))
@@ -87,7 +84,6 @@ class CompassCodeConcatenatedTN(TensorNetwork):
                             qubit1, leg1 = attachments[(j, col)]
                             qubit2, leg2 = attachments[(j, col + 1)]
                             print("\t adding non-isometry between qubits", qubit1, "and", qubit2, "at row", j, "col", col)
-                            print("\t on legs", leg1, "and", leg2)
                             connections_to_trace.add((qubit1, ("x1", j, col), leg1, 2))
                             connections_to_trace.add((qubit2, ("x2", j, col), leg2, 2))
 
@@ -111,8 +107,7 @@ class CompassCodeConcatenatedTN(TensorNetwork):
 
                 qubit1, leg1 = attachments[(0, col)]
                 qubit2, leg2 = attachments[(0, col + 1)]
-                print("\t adding single non-isometry between qubits", qubit1, "and", qubit2, "at row", 0, "col", col)
-                print("\t on legs", leg1, "and", leg2)
+
                 connections_to_trace.add((qubit1, ("x1", 0, col), leg1, 2))
                 connections_to_trace.add((qubit2, ("x2", 0, col), leg2, 2))
 
@@ -125,15 +120,12 @@ class CompassCodeConcatenatedTN(TensorNetwork):
         super().__init__(nodes, truncate_length=truncate_length)
 
         for leg in range(d):
-            print("self tracing qubits:", (0,0), (1,leg), [leg], [d])
             self.self_trace((0,0), (1,leg), [leg], [d])
  
         for connection in connections_to_trace:
-            print("self tracing connection:", connection)
             self.self_trace(connection[0], connection[1], [connection[2]], [connection[3]])  
 
         for node in trace_with_stopper:
-            print("self tracing node:", node)
             self.nodes[node] = (
                 self.nodes[node]
                 .trace_with_stopper(PAULI_X, 2)
