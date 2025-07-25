@@ -1,4 +1,11 @@
+import ast
 import csv
+import os
+
+import qlego
+import sys
+sys.path.insert(0, "/Users/junevanlerberghe/Documents/Duke/research/repositories/compass-wep-complexity/tnqec")
+
 
 from collections import defaultdict
 import time
@@ -11,8 +18,13 @@ from qlego.stabilizer_tensor_enumerator import (
     _index_leg,
 )
 
+import qlego
+print(qlego.__file__)
+
 from compassCodes.compass_code import CompassCode
 from qlego.tensor_network import _PartiallyTracedEnumerator
+
+print(qlego.tensor_network.__file__)
 
 #with open('intermediate_info.csv', 'w', newline='') as csvfile:
 #    headers = ["q_shor", "coloring", "representation", "run #", "distance", "time", "contraction cost", "contraction width"]
@@ -97,7 +109,7 @@ def stabilizer_enumerator_polynomial(
 
             if node1_pte == node2_pte:
                 # both nodes are in the same PTE!
-                pte, ops_count = node1_pte.self_trace(
+                pte, ops_count, _ = node1_pte.self_trace(
                     join_legs1=[
                         (node_idx1, leg) if isinstance(leg, int) else leg
                         for leg in join_legs1
@@ -123,7 +135,7 @@ def stabilizer_enumerator_polynomial(
                 ]
                 intermediate_tensor_sizes.append(len(pte.tensor))
             else:
-                pte, ops_count = node1_pte.merge_with(
+                pte, ops_count, _ = node1_pte.merge_with(
                     node2_pte,
                     join_legs1=[
                         (node_idx1, leg) if isinstance(leg, int) else leg
@@ -188,80 +200,200 @@ def get_contraction_time(tn):
     return end - start, wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count
 
 
-def run_wep_calc(q_shor, num_runs, coloring, distance, file_name):
-    data = []
+'''def run_wep_calc(q_shor, num_runs, coloring, distance, file_name, intermediate_file="intermediate_info.csv"):
     compass_code = CompassCode(distance, coloring)
+
+    completed_runs = defaultdict(list)
+    coloring_map = {}
+
+    if os.path.exists(intermediate_file):
+        with open(intermediate_file, 'r') as f:
+            reader = csv.reader(f, delimiter=';')
+            for row in reader:
+                key = (row[0], row[2], row[4])  # (q_shor, name, distance)
+                completed_runs[key].append(row)
+                coloring_map[(row[0], row[4])] = row[1]
+
     for name, rep in compass_code.get_representations().items():
-        # MSP and Tanner Network take too long for distances > 4, so skip them
-        if(name == "Measurement State Prep" or name == "Tanner Network"):
-            if(distance > 4):
-                continue
+        key = (str(q_shor), name, str(distance))
+        existing_rows = completed_runs.get(key, [])
+        runs_done = len(existing_rows)
 
-        if(name == "Concatenated"):
-            if(distance > 5):
-                continue
+        durations = [float(row[5]) for row in existing_rows]
+        contraction_costs = [float(row[6]) for row in existing_rows]
+        contraction_widths = [float(row[7]) for row in existing_rows]
+        operations = [float(row[8]) for row in existing_rows]
+        tensor_sizes = [float(row[9]) for row in existing_rows]
 
-        total_contraction_width = 0
-        total_contraction_cost = 0
-        total_ops = 0
-        last_wep = None
-        durations = []
+        if runs_done >= num_runs:
+            print(f"Skipping {key}: {runs_done} runs already completed.")
+            wep = existing_rows[-1][-1]
 
-        for i in range(num_runs):
-            tn = rep()
-            duration, wep, contraction_width, contraction_cost, intermediate_tensor_sizes, operations = get_contraction_time(tn)
-            durations.append(duration)
-            total_contraction_width += contraction_width
-            total_contraction_cost += contraction_cost
-            total_ops += operations
-            last_wep = wep 
+        else:
+            print(f"Continuing {key}: {runs_done}/{num_runs} runs completed.")
 
-            #with open('intermediate_info.csv', 'a', newline='') as csvfile:
-            #    writer = csv.writer(csvfile, delimiter=';')
-            #    writer.writerow([q_shor, coloring, name, i, distance, duration, contraction_cost, contraction_width])
+            if((str(q_shor), str(distance)) in coloring_map):
+                coloring = ast.literal_eval(coloring_map[(str(q_shor), str(distance))])
+                compass_code = CompassCode(distance, list(coloring))
+                rep = compass_code.get_representations()[name]
 
-        durations = np.array(durations)
-        average_time = round(np.mean(durations), 3)
-        median_time = round(np.median(durations), 3)
-        std_dev = round(np.std(durations, ddof = 1), 3)
+            print(f"\t with coloring: ", coloring)
+            
+            wep = None
+            for i in range(runs_done, num_runs):
 
-        average_contraction_width = round(total_contraction_width / num_runs, 3)
-        average_contraction_cost = round(total_contraction_cost / num_runs, 3)
-        average_operations = round(total_ops / num_runs, 3)
-        average_tensor_size = round(sum(intermediate_tensor_sizes) / len(intermediate_tensor_sizes), 3)
-        max_tensor = max(intermediate_tensor_sizes)
+                coloring = generate_checkerboard_coloring(d)
+                for i in range(d - 1):
+                    for j in range(d - 1):
+                        if np.random.rand() < q_shor:
+                            coloring[i][j] = 2
+                tn = rep()
+                duration, wep, contraction_width, contraction_cost, intermediate_tensor_sizes, ops = get_contraction_time(tn)
+                
+                durations.append(duration)
+                contraction_widths.append(contraction_width)
+                contraction_costs.append(contraction_cost)
+                operations.append(ops)
+                tensor_sizes.append(np.mean(intermediate_tensor_sizes))  # average per run
 
-        with open(file_name, 'a', newline='') as csvfile:
-            writer = csv.writer(csvfile, delimiter=';')
-            writer.writerow([q_shor, coloring, name, distance, average_time, median_time, std_dev, average_contraction_cost, average_contraction_width, average_operations, average_tensor_size, max_tensor, wep])
-    
-    return average_time, last_wep
+                with open(intermediate_file, 'a', newline='') as csvfile:
+                    writer = csv.writer(csvfile, delimiter=';')
+                    writer.writerow([q_shor, coloring, name, i, distance, duration, contraction_cost, contraction_width, ops, np.mean(intermediate_tensor_sizes), wep])
 
+            # Compute stats once num_runs are achieved
+            if len(durations) == num_runs:
+                average_time = round(np.mean(durations), 3)
+                median_time = round(np.median(durations), 3)
+                std_dev = round(np.std(durations, ddof=1), 3)
+
+                average_contraction_cost = round(np.mean(contraction_costs), 3)
+                average_contraction_width = round(np.mean(contraction_widths), 3)
+                average_operations = round(np.mean(operations), 3)
+                average_tensor_size = round(np.mean(tensor_sizes), 3)
+                max_tensor = round(max(tensor_sizes), 3)
+
+                with open(file_name, 'a', newline='') as csvfile:
+                    writer = csv.writer(csvfile, delimiter=';')
+                    writer.writerow([q_shor, coloring, name, distance, average_time, median_time, std_dev, average_contraction_cost, average_contraction_width, average_operations, average_tensor_size, max_tensor, wep])
+
+    return average_time, wep'''
 
 def generate_checkerboard_coloring(d):
     return [[1 + (i + j) % 2 for j in range(d-1)] for i in range(d-1)]
 
+def run_wep_calc(q_shor, num_runs, distance, file_name, intermediate_file="intermediate_info.csv"):
+    completed_runs = defaultdict(list)
+
+    if os.path.exists(intermediate_file):
+        with open(intermediate_file, 'r') as f:
+            reader = csv.reader(f, delimiter=';')
+            for row in reader:
+                key = (row[0], row[2], row[4], row[3])  # (q_shor, name, distance, run_index)
+                completed_runs[key] = row
+
+    for run_index in range(num_runs):
+        # Generate a new coloring per run
+        coloring = generate_checkerboard_coloring(distance)
+        for i in range(distance - 1):
+            for j in range(distance - 1):
+                if np.random.rand() < q_shor:
+                    coloring[i][j] = 2
+
+        compass_code = CompassCode(distance, coloring)
+
+        for name, rep in compass_code.get_representations().items():
+            key = (str(q_shor), name, str(distance), str(run_index))
+            if key in completed_runs:
+                print(f"Skipping run {run_index} for {name} (already completed)")
+                continue
+
+            print(f"Running {name}, run {run_index}, coloring: {coloring}")
+
+            tn = rep()
+            duration, wep, contraction_width, contraction_cost, intermediate_tensor_sizes, ops = get_contraction_time(tn)
+
+            with open(intermediate_file, 'a', newline='') as csvfile:
+                writer = csv.writer(csvfile, delimiter=';')
+                writer.writerow([
+                    q_shor, coloring, name, run_index, distance, duration,
+                    contraction_cost, contraction_width, ops,
+                    np.mean(intermediate_tensor_sizes), wep
+                ])
+
+    # After all runs, aggregate the data per representation
+    all_data = defaultdict(list)
+    with open(intermediate_file, 'r') as f:
+        reader = csv.reader(f, delimiter=';')
+        for row in reader:
+            key = (row[0], row[2], row[4])  # (q_shor, name, distance)
+            if row[0] == str(q_shor) and row[4] == str(distance):
+                all_data[key].append(row)
+
+    existing_summary_keys = set()
+    if os.path.exists(file_name):
+        with open(file_name, 'r') as f:
+            reader = csv.reader(f, delimiter=';')
+            for row in reader:
+                # Make sure the file is not empty or malformed
+                if len(row) >= 4:
+                    key = (row[0], row[1], row[2])  # (q_shor, name, distance)
+                    existing_summary_keys.add(key)
+
+    for key, rows in all_data.items():
+        if len(rows) < num_runs:
+            print(f"Not enough runs for {key}, skipping stats")
+            continue
+
+        if key in existing_summary_keys:
+            print(f"Skipping {key}: already summarized in {file_name}")
+            continue
+
+        durations = [float(row[5]) for row in rows]
+        contraction_costs = [float(row[6]) for row in rows]
+        contraction_widths = [float(row[7]) for row in rows]
+        operations = [float(row[8]) for row in rows]
+        tensor_sizes = [float(row[9]) for row in rows]
+        wep = rows[-1][-1]  # last WEP value
+
+        average_time = round(np.mean(durations), 3)
+        median_time = round(np.median(durations), 3)
+        std_dev = round(np.std(durations, ddof=1), 3)
+
+        average_contraction_cost = round(np.mean(contraction_costs), 3)
+        average_contraction_width = round(np.mean(contraction_widths), 3)
+        average_operations = round(np.mean(operations), 3)
+        average_tensor_size = round(np.mean(tensor_sizes), 3)
+        max_tensor = round(max(tensor_sizes), 3)
+
+        with open(file_name, 'a', newline='') as csvfile:
+            writer = csv.writer(csvfile, delimiter=';')
+            writer.writerow([
+                key[0], key[1], key[2],
+                average_time, median_time, std_dev,
+                average_contraction_cost, average_contraction_width,
+                average_operations, average_tensor_size,
+                max_tensor, wep
+            ])
+
+
+
+
 
 #### Should think about how I want to run this in the future, wrap it all up into a nice function 
     ### with an option to name the output csv file as well
-file_name = 'wep_calcs.csv'
+file_name = 'wep_calcs_mem_test.csv'
 
-headers = ["q_shor", "coloring", "representation", "distance", "avg time", "median time", "std dev", "contraction cost", "contraction width", "operations", "avg intermediate tensor", "max tensor size", "wep"]
+headers = ["q_shor", "representation", "distance", "avg time", "median time", "std dev", "contraction cost", "contraction width", "operations", "avg intermediate tensor", "max tensor size", "wep"]
 with open(file_name, 'w', newline='') as csvfile:
     writer = csv.writer(csvfile, delimiter=';')
     writer.writerow(headers)
 
-num_runs = 1
-ds = [3, 4, 5, 6]
-q_shors = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+num_runs = 10
+ds = [3]
+q_shors = [0.0]
 
 for d in ds:
     for q_shor in q_shors:
         # if random number is less than q_shor, then put an X stabilizer in that plaquette
         # start with distance d checkerboard coloring, then change to Xs whenver necessary
-        coloring = generate_checkerboard_coloring(d)
-        for i in range(d - 1):
-            for j in range(d - 1):
-                if np.random.rand() < q_shor:
-                    coloring[i][j] = 2
-        run_wep_calc(q_shor, num_runs, coloring, d, file_name)
+        run_wep_calc(q_shor, num_runs, d, file_name, "mem_test.csv")

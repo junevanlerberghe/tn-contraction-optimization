@@ -1,18 +1,29 @@
+import ast
 import csv
 
 from collections import defaultdict
+import random
+import cotengra as ctg
+import math
+import re
 import time
-from typing import List, Tuple
+from typing import List, Set, Tuple
+from galois import GF2
+import galois
+from scipy.linalg import null_space
 import numpy as np
 from qlego.progress_reporter import TqdmProgressReporter
 from qlego.simple_poly import SimplePoly
 from qlego.progress_reporter import DummyProgressReporter, ProgressReporter
 from qlego.stabilizer_tensor_enumerator import (
     _index_leg,
+    StabilizerCodeTensorEnumerator,
+    _index_legs,
 )
 
 from compassCodes.compass_code import CompassCode
 from qlego.tensor_network import _PartiallyTracedEnumerator
+from qlego.symplectic import sslice
 
 
 def stabilizer_enumerator_polynomial(
@@ -67,14 +78,19 @@ def stabilizer_enumerator_polynomial(
             )
 
             intermediate_tensor_sizes.append(len(tensor))
-        
+
         if cotengra and len(tn.nodes) > 0 and len(tn.traces) > 0:
+
             with progress_reporter.enter_phase("cotengra contraction"):
                 traces, tree = tn._cotengra_contraction(
                     free_legs, leg_indices, index_to_legs, verbose, progress_reporter
                 )
+
             contraction_width = tree.contraction_width()
             contraction_cost = tree.contraction_cost()
+            score_cotengra = tree.get_score()
+            estimated_cost = test_conjoining_cost(tn, traces)
+            print("tree default objective: ", tree.get_default_objective())
 
         summed_legs = [leg for leg in free_legs if leg not in open_legs]
 
@@ -91,6 +107,8 @@ def stabilizer_enumerator_polynomial(
         ):
             node1_pte = None if node_idx1 not in tn.ptes else tn.ptes[node_idx1]
             node2_pte = None if node_idx2 not in tn.ptes else tn.ptes[node_idx2]
+            #print("in Contraction: Node indices:", node_idx1, node_idx2, "Join legs:", join_legs1, join_legs2)
+            #print("\t Node 1 PTE:", node1_pte, "Node 2 PTE:", node2_pte)
 
             if node1_pte == node2_pte:
                 # both nodes are in the same PTE!
@@ -106,6 +124,11 @@ def stabilizer_enumerator_polynomial(
                     progress_reporter=progress_reporter,
                     verbose=verbose,
                 )
+                # print("\t self tracing PTE")
+                # print("\t\t sizes: ", len(node1_pte.tensor), len(node2_pte.tensor))
+                # print("\t\t cost: ", ops_count)
+                # print("\t\t new pte length: ", len(pte.tensor))
+                # print("\t\t join legs 1: ", join_legs1, " join legs 2: ", join_legs2)
                 for node in pte.nodes:
                     tn.ptes[node] = pte
                 tn.legs_left_to_join[node_idx1] = [
@@ -133,7 +156,7 @@ def stabilizer_enumerator_polynomial(
                     verbose=verbose,
                     progress_reporter=progress_reporter,
                 )
-
+                
                 for node in pte.nodes:
                     tn.ptes[node] = pte
                 tn.legs_left_to_join[node_idx1] = [
@@ -147,7 +170,9 @@ def stabilizer_enumerator_polynomial(
                     if leg not in join_legs2
                 ]
                 intermediate_tensor_sizes.append(len(pte.tensor))
+
             total_ops_count += ops_count
+
             node1_pte = None if node_idx1 not in tn.ptes else tn.ptes[node_idx1]
 
             for k in list(node1_pte.tensor.keys()):
@@ -163,7 +188,8 @@ def stabilizer_enumerator_polynomial(
             pte_list = list(set(tn.ptes.values()))
             pte = pte_list[0]
             for pte2 in pte_list[1:]:
-                pte = pte.tensor_product(pte2, verbose=verbose)
+                pte, ops1 = pte.tensor_product(pte2, verbose=verbose)
+                total_ops_count += ops1
 
         if len(pte.tensor) > 1:
             tn._wep = pte.ordered_key_tensor(open_legs)
@@ -171,214 +197,197 @@ def stabilizer_enumerator_polynomial(
             tn._wep = pte.tensor[()]
             tn._wep = tn._wep.normalize(verbose=verbose)
 
-        return tn._wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count
+        return tn._wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count, total_ops_count2, full_flops, score_cotengra, estimated_cost
 
-def custom(trial_dict):
-    # trial_dict: {'tree': <ContractionTree(N=18)>}
-    
-    return 1
 
-def get_contraction_time(tn, cotengra):
-    tn.analyze_traces(cotengra=cotengra, minimize=custom, max_repeats=150)
+def get_contraction_time(tn, cotengra, max_repeats):
+    tn.analyze_traces(cotengra=cotengra, on_trial_error='raise', max_repeats=max_repeats)
     start = time.time()
-    wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count = stabilizer_enumerator_polynomial(
+    wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count, total_ops_count2, full_flops, score_cotengra, submatrix_rank_cost = stabilizer_enumerator_polynomial(
         tn, verbose=False, progress_reporter=TqdmProgressReporter(), cotengra=cotengra
     )
     end = time.time()
-    return end - start, wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count
+    return end - start, wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count, total_ops_count2, full_flops, score_cotengra, submatrix_rank_cost
 
 
-def reorder_traces_by_sparsity(tn, reverse=False):
-    """
-    Compute sparsity = (nnz of node1.h) + (nnz of node2.h) for each trace,
-    then sort tn.traces ascending by that sum and assign back.
-    """
-    trace_scores = []
-    for trace in tn.traces:
-        node_idx1, node_idx2, join_legs1, join_legs2 = trace
-        h1 = np.array(tn.nodes[node_idx1].h)
-        h2 = np.array(tn.nodes[node_idx2].h)
-        sparsity = np.count_nonzero(h1) + np.count_nonzero(h2)
-        trace_scores.append((sparsity, trace))
-
-    # sort by the sparsity (the first element of each tuple)
-    with open('test.txt', 'a') as f:
-        f.write("trace scores:\n")
-        f.write(str(trace_scores) + "\n")
-
-    trace_scores.sort(key=lambda x: x[0], reverse=reverse)
-
-    # extract just the traces in sorted order
-    tn.traces = [t for (_, t) in trace_scores]
-
-def estimate_sparse_mult_cost(h1, h2):
-    # h1: (m x n), h2: (n x p)
-    nnz1 = np.count_nonzero(h1)
-    nnz2 = np.count_nonzero(h2)
-    rows_b = h2.shape[0]
-    if rows_b == 0:
-        return float('inf')  # avoid divide-by-zero
-    return nnz1 * (nnz2 / rows_b)
+def compute_gf2_rank(pcm_sub):
+    GF2 = galois.GF(2)
+    pcm_gf2 = GF2(pcm_sub)
+    return pcm_gf2.row_space().shape[0]
 
 
-def reorder_traces_by_sparse_mult_cost(tn, reverse=False):
-    """
-    Reorders traces by estimated sparse multiplication cost of node.h matrices.
-    """
-    trace_scores = []
-    for trace in tn.traces:
-        node_idx1, node_idx2, *_ = trace
-        h1 = np.array(tn.nodes[node_idx1].h)
-        h2 = np.array(tn.nodes[node_idx2].h)
-
-        cost = estimate_sparse_mult_cost(h1, h2)
-        trace_scores.append((cost, trace))
-
-    trace_scores.sort(key=lambda x: x[0], reverse=reverse)
-    tn.traces = [t for (_, t) in trace_scores]
-
-
-def get_weighted_avg_sparsity(tn):
-    sparsity_info = []
-    for node_idx1, node_idx2, join_legs1, join_legs2 in tn.traces:
-        h1 = np.array(tn.nodes[node_idx1].h)
-        h2 = np.array(tn.nodes[node_idx2].h)
-        sparsity_info.append(estimate_sparse_mult_cost(h1, h2))
-
-    return round(sum((i+1) * w for i, w in enumerate(sparsity_info)), 3)
-
-
-def get_weighted_avg(tn):
-    sparsity_info = []
-    for node_idx1, node_idx2, join_legs1, join_legs2 in tn.traces:
-        h1 = np.array(tn.nodes[node_idx1].h)
-        h2 = np.array(tn.nodes[node_idx2].h)
-        sparsity_info.append(np.count_nonzero(h1) + np.count_nonzero(h2))
-
-    return sum((i+1) * w for i, w in enumerate(sparsity_info))
-
-
-def run_wep_for_sorted_traces(coloring, d, num_runs=1):
-    for _ in range(num_runs):
-        compass_code = CompassCode(d, coloring)
-
-        tn = compass_code.concatenated()
-
-        weighted_avg = get_weighted_avg(tn)
-        sparsity = get_weighted_avg_sparsity(tn)
-        contraction_time, wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count = get_contraction_time(tn, False)
-        avg_intermediate_tensor_size = round(np.mean(intermediate_tensor_sizes), 3)
-
-        with open('trace_ordering_tests.csv', 'a', newline='') as csvfile:
-            writer = csv.writer(csvfile, delimiter=';')
-            writer.writerow([coloring, d, contraction_time, "default", weighted_avg, sparsity])
-
-
-        tn = compass_code.concatenated()
-        reorder_traces_by_sparse_mult_cost(tn)
-        weighted_avg = get_weighted_avg(tn)
-        sparsity = get_weighted_avg_sparsity(tn)
-        contraction_time, wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count = get_contraction_time(tn, False)
-        avg_intermediate_tensor_size = round(np.mean(intermediate_tensor_sizes), 3)
-
-        with open('trace_ordering_tests.csv', 'a', newline='') as csvfile:
-            writer = csv.writer(csvfile, delimiter=';')
-            writer.writerow([coloring, d, contraction_time, "sorted", weighted_avg, sparsity])
-
-        # Run wep calculation for reverse sorted pcm sparsity
-        tn = compass_code.concatenated()
-        
-        reorder_traces_by_sparse_mult_cost(tn, reverse=True)
-        weighted_avg = get_weighted_avg(tn)
-        sparsity = get_weighted_avg_sparsity(tn)
-        contraction_time, wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count = get_contraction_time(tn, False)
-        avg_intermediate_tensor_size = round(np.mean(intermediate_tensor_sizes), 3)
-
-        with open('trace_ordering_tests.csv', 'a', newline='') as csvfile:
-            writer = csv.writer(csvfile, delimiter=';')
-            writer.writerow([coloring, d, contraction_time, "reverse sorted", weighted_avg, sparsity])
-
-        # Run wep calculation for randomly sorted pcm sparsity
-        tn = compass_code.concatenated()
-        np.random.shuffle(tn.traces)
-        weighted_avg = get_weighted_avg(tn)
-        sparsity = get_weighted_avg_sparsity(tn)
-        contraction_time, wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count = get_contraction_time(tn, False)
-        avg_intermediate_tensor_size = round(np.mean(intermediate_tensor_sizes), 3)
-
-        with open('trace_ordering_tests.csv', 'a', newline='') as csvfile:
-            writer = csv.writer(csvfile, delimiter=';')
-            writer.writerow([coloring, d, contraction_time, "random", weighted_avg, sparsity])
-
-        # Run wep calculation with cotengra optimization
-        tn = compass_code.concatenated()
-        
-        contraction_time, wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count = get_contraction_time(tn, True)
-        avg_intermediate_tensor_size = round(np.mean(intermediate_tensor_sizes), 3)
-
-        with open('trace_ordering_tests.csv', 'a', newline='') as csvfile:
-            writer = csv.writer(csvfile, delimiter=';')
-            writer.writerow([coloring, d, contraction_time, "cotengra", -1, -1])
-
+def test_conjoining_cost(tn, traces):
+    # If there's only one node and no traces, return it directly
+    if len(tn.nodes) == 1 and len(tn.traces) == 0:
+        return list(tn.nodes.values())[0]
     
+    total_submatrix_rank_cost = 0
 
-def run_wep_for_many_traces(coloring, d):
-    compass_code = CompassCode(d, coloring)
+    pte_lengths = {}
+    open_legs = {}
+    traceable_legs = {}
+    for node_idx, pte in tn.ptes.items():
+        pte_lengths[node_idx] = len(pte.tensor)
+        open_legs[node_idx] = len(pte.tracable_legs) - 1
+        traceable_legs[node_idx] = pte.tracable_legs
 
-    #for name, rep in compass_code.get_representations().items():
-    for _ in range(30):
-        tn = compass_code.concatenated()
-        np.random.shuffle(tn.traces)
+    # Map from node_idx to the index of its PTE in ptes list
+    nodes = list(tn.nodes.values())
+    ptes: List[Tuple[StabilizerCodeTensorEnumerator, Set[str]]] = [
+        (node, {node.idx}) for node in nodes
+    ]
+    node_to_pte = {node.idx: i for i, node in enumerate(nodes)}
 
-        # need to loop through the traces and analyze cost somehow
-        sparsity_info = []
-        for node_idx1, node_idx2, join_legs1, join_legs2 in tn.traces:
-            h1 = np.array(tn.nodes[node_idx1].h)
-            h2 = np.array(tn.nodes[node_idx2].h)
-            sparsity_info.append(np.count_nonzero(h1) + np.count_nonzero(h2))
+    for node_idx1, node_idx2, join_legs1, join_legs2 in traces:
+        pte1_len = pte_lengths.get(node_idx1, 0)
+        pte2_len = pte_lengths.get(node_idx2, 0)
 
-        numerator = sum((i+1) * w for i, w in enumerate(sparsity_info))
-        weighted_avg = round(numerator / len(sparsity_info), 3)
+        join_legs1 = _index_legs(node_idx1, join_legs1)
+        join_legs2 = _index_legs(node_idx2, join_legs2)
 
-        contraction_time, wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count = get_contraction_time(tn)
-        avg_intermediate_tensor_size = round(np.mean(intermediate_tensor_sizes), 3)
+        pte1_idx = node_to_pte.get(node_idx1)
+        pte2_idx = node_to_pte.get(node_idx2)
 
-        with open('sparsity_tests.csv', 'a', newline='') as csvfile:
-            writer = csv.writer(csvfile, delimiter=';')
-            writer.writerow([d, "concatenated", round(contraction_time, 3), contraction_cost, contraction_width, weighted_avg, avg_intermediate_tensor_size, total_ops_count])
+        open_legs1 = open_legs.get(node_idx1, 0)
+        open_legs2 = open_legs.get(node_idx2, 0)
+
+        # Case 1: Both nodes are in the same PTE
+        if pte1_idx == pte2_idx:
+            custom_cost = pte1_len * 0.25
+
+            new_length = custom_cost
+            pte_lengths[node_idx1] = new_length 
+            pte_lengths[node_idx2] = new_length
+
+            pte, nodes = ptes[pte1_idx]
+
+            for node in nodes:
+                pte_lengths[node] = new_length
+
+            new_traceable_legs = [
+                leg
+                for leg in traceable_legs[node_idx1]
+                if leg not in join_legs1 and leg not in join_legs2
+            ]
+
+            for node in nodes:
+                open_legs[node] = open_legs1 - 2
+                traceable_legs[node] = new_traceable_legs
+
+            open_legs1 -= 1
+            open_legs2 -= 1
+            
+            
+            new_pte = pte.self_trace(join_legs1, join_legs2)
+            ptes[pte1_idx] = (new_pte, nodes)
 
 
-with open('sparsity_tests.csv', 'w', newline='') as csvfile:
-    writer = csv.writer(csvfile, delimiter=';')
-    writer.writerow(["distance", "representation", "contraction_time", "contraction_cost", "contraction_width", "sparsity_weighted_avg", "avg_intermediate_tensor_size", "total_operations"])
+            open_legs_set = set(new_traceable_legs)
+            open_leg_indices = [i for i, leg in enumerate(new_pte.legs) if leg in open_legs_set]
+            open_leg_indices += [i + (new_pte.h.shape[1]//2) for i, leg in enumerate(new_pte.legs) if leg in open_legs_set]
+            open_leg_submatrix = new_pte.h[:, open_leg_indices]
+            rank_submatrix = compute_gf2_rank(open_leg_submatrix)
+
+        # Case 2: Nodes are in different PTEs - merge them
+        else:
+            custom_cost = 0.25 * pte1_len * pte2_len
+            new_length = custom_cost
+
+            pte_lengths[node_idx1] = new_length
+            pte_lengths[node_idx2] = new_length
+
+            open_legs[node_idx1] = open_legs1 + open_legs2 - 1
+
+
+            pte1, nodes1 = ptes[pte1_idx]
+            pte2, nodes2 = ptes[pte2_idx]
+
+            new_pte = pte1.conjoin(pte2, legs1=join_legs1, legs2=join_legs2)
+            merged_nodes = nodes1.union(nodes2)
+            # Update the first PTE with merged result
+            ptes[pte1_idx] = (new_pte, merged_nodes)
+            # Remove the second PTE
+            ptes.pop(pte2_idx)
+
+
+            for node in merged_nodes:
+                pte_lengths[node] = new_length
+
+            new_traceable_legs = [
+                leg
+                for leg in traceable_legs[node_idx1]
+                if leg not in join_legs1 and leg not in join_legs2
+            ]
+
+            new_traceable_legs += [
+                leg
+                for leg in traceable_legs[node_idx2]
+                if leg not in join_legs1 and leg not in join_legs2
+            ]
+
+            
+            open_legs_set = set(new_traceable_legs)
+            open_leg_indices = [i for i, leg in enumerate(new_pte.legs) if leg in open_legs_set]
+            open_leg_indices += [i + (new_pte.h.shape[1]//2) for i, leg in enumerate(new_pte.legs) if leg in open_legs_set]
+            open_leg_submatrix = new_pte.h[:, open_leg_indices]
+            rank_submatrix = compute_gf2_rank(open_leg_submatrix)
+
+            for node in merged_nodes:
+                open_legs[node] = open_legs1 + open_legs2 - 1
+                traceable_legs[node] = new_traceable_legs
+
+            # Update node_to_pte mappings
+            for node in nodes2:
+                node_to_pte[node] = pte1_idx
+            # Adjust indices for all nodes in PTEs after the removed one
+            for node, pte_idx in node_to_pte.items():
+                if pte_idx > pte2_idx:
+                    node_to_pte[node] = pte_idx - 1
+
+        total_submatrix_rank_cost += 2**rank_submatrix
+        
+    return total_submatrix_rank_cost
+
 
 
 def generate_checkerboard_coloring(d):
     return [[1 + (i + j) % 2 for j in range(d-1)] for i in range(d-1)]
 
 
-with open('trace_ordering_tests.csv', 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile, delimiter=';')
-        writer.writerow(["coloring", "distance", "cotengra?", "contraction_time", "type", "# nonzero avg", "sparsity avg_2"])
+def run_wep_calc(q_shor, num_runs, distance, file_name, repeats):
+    for run_index in range(num_runs):
+        # Generate a new coloring per run
+        coloring = generate_checkerboard_coloring(distance)
+        for i in range(distance - 1):
+            for j in range(distance - 1):
+                if np.random.rand() < q_shor:
+                    coloring[i][j] = 2
 
-#### Should think about how I want to run this in the future, wrap it all up into a nice function 
-    ### with an option to name the output csv file as well
-# ds = [4]
-# q_shors = [1.0]
+        compass_code = CompassCode(distance, coloring)
 
-# for d in ds:
-#     for q_shor in q_shors:
-#         coloring = generate_checkerboard_coloring(d)
-#         for i in range(d - 1):
-#             for j in range(d - 1):
-#                 if np.random.rand() < q_shor:
-#                     coloring[i][j] = 2
-#         run_wep_for_many_traces(coloring, d)
+        for name, rep in compass_code.get_representations().items():
+            # if(distance > 4 and (name == "Measurement State Prep" or name == "Tanner Network")):
+            #     continue
+            tn = rep()
+            contraction_time, wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count, total_ops_count2, full_flops, score_cotengra, submatrix_rank_cost = get_contraction_time(tn, True, repeats)
+
+            with open(file_name, 'a', newline='') as csvfile:
+                writer = csv.writer(csvfile, delimiter=';')
+                writer.writerow([d, run_index, q_shor, repeats, "size", name, round(contraction_time, 4), total_ops_count, score_cotengra, submatrix_rank_cost])    
 
 
-d = 3
-coloring = generate_checkerboard_coloring(d)
-compass = CompassCode(d, coloring)
-tn = compass.concatenated()
-#run_wep_for_sorted_traces(coloring, d, 1)
-contraction_time, wep, contraction_width, contraction_cost, intermediate_tensor_sizes, total_ops_count = get_contraction_time(tn, True)
+# with open('optimal_cotengra.csv', 'w', newline='') as csvfile:
+#     writer = csv.writer(csvfile, delimiter=';')
+#     writer.writerow(["distance", "run_index", "q_shor", "max_repeats", "minimize", "representation", "contraction_time", "total_ops", "score_cotengra", "submatrix_rank_cost"])
+
+
+num_runs = 1
+ds = [3]
+q_shors = [0.0]
+#max_repeats = [512, 256, 128, 64, 16]
+max_repeats = [300]
+
+for d in ds:
+    for q_shor in q_shors:
+        for repeats in max_repeats:
+            run_wep_calc(q_shor, num_runs, d, 'optimal_cotengra.csv', repeats)

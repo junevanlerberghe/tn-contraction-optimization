@@ -31,6 +31,10 @@ class CompassCodeConcatenatedTN(TensorNetwork):
         connections_to_trace = set()
         trace_with_stopper = set()
         for col in range(len(coloring[0])):
+            # Skip this column if there are no 1s in it
+            if not any(coloring[row][col] == 1 for row in range(len(coloring))):
+                continue
+            
             row = 0
             while row < len(coloring):
                 if coloring[row][col] == 2:
