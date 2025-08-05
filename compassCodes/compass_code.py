@@ -1,9 +1,9 @@
-from qlego.codes.stabilizer_tanner_code import StabilizerTannerCodeTN
-from qlego.legos import Legos
-from qlego.codes.stabilizer_measurement_state_prep import StabilizerMeasurementStatePrepTN
+from planqtn.networks.stabilizer_tanner_code import StabilizerTannerCodeTN
+from planqtn.legos import Legos
+from planqtn.networks.stabilizer_measurement_state_prep import StabilizerMeasurementStatePrepTN
 from compassCodes.compass_code_rotated import CompassCodeRotatedTN
 from compassCodes.compass_code_concatenated import CompassCodeConcatenatedTN
-from qlego.codes.compass_code import CompassCodeTN
+from planqtn.networks.compass_code import CompassCodeDualSurfaceCodeLayoutTN
 
 
 class CompassCode():
@@ -36,7 +36,7 @@ class CompassCode():
         return StabilizerMeasurementStatePrepTN(self.h_matrix())
 
     def dual_surface(self):
-        return CompassCodeTN(self.coloring, lego=lambda i: Legos.enconding_tensor_512)
+        return CompassCodeDualSurfaceCodeLayoutTN(self.coloring, lego=lambda i: Legos.encoding_tensor_512)
 
     def rotated(self):
         return CompassCodeRotatedTN(d=self.d, custom_connections=self.make_custom_connections())

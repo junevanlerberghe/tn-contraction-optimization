@@ -1,8 +1,8 @@
 from galois import GF2
 import numpy as np
-from qlego.legos import Legos
-from qlego.tensor_network import PAULI_X, PAULI_Z, TensorNetwork
-from qlego.stabilizer_tensor_enumerator import StabilizerCodeTensorEnumerator
+from planqtn.legos import Legos
+from planqtn.tensor_network import TensorNetwork
+from planqtn.stabilizer_tensor_enumerator import StabilizerCodeTensorEnumerator
 
 
 class CompassCodeRotatedTN(TensorNetwork):
@@ -11,7 +11,7 @@ class CompassCodeRotatedTN(TensorNetwork):
         d,
         custom_connections: list,
         *,
-        lego=lambda node: Legos.enconding_tensor_512,
+        lego=lambda node: Legos.encoding_tensor_512,
         coset_error: GF2 = None,
         truncate_length: int = None
     ):
@@ -25,7 +25,7 @@ class CompassCodeRotatedTN(TensorNetwork):
         nodes = {
             (r, c): StabilizerCodeTensorEnumerator(
                 lego((r, c)),
-                idx=(r, c),
+                tensor_id=(r, c),
             )
             # col major ordering
             for r in range(d)
@@ -40,30 +40,30 @@ class CompassCodeRotatedTN(TensorNetwork):
         top_left_open = open_legs.get((0,0))
         nodes[(0, 0)] = (
             nodes[(0, 0)]
-            .trace_with_stopper(PAULI_Z, 2 if 2 in top_left_open else 3)
-            .trace_with_stopper(PAULI_X, 3 if 2 in top_left_open else 0)
+            .trace_with_stopper(Legos.stopper_z, 2 if 2 in top_left_open else 3)
+            .trace_with_stopper(Legos.stopper_x, 3 if 2 in top_left_open else 0)
         )
 
 
         top_right_open = open_legs.get((0, last_col))
         nodes[(0, last_col)] = (
             nodes[(0, last_col)]
-            .trace_with_stopper(PAULI_Z, 1 if 1 in top_right_open else 0)
-            .trace_with_stopper(PAULI_X, 0 if 1 in top_right_open else 3)
+            .trace_with_stopper(Legos.stopper_z, 1 if 1 in top_right_open else 0)
+            .trace_with_stopper(Legos.stopper_x, 0 if 1 in top_right_open else 3)
         )
 
         bottom_left_open = open_legs.get((last_row, 0))
         nodes[(last_row, 0)] = (
             nodes[(last_row, 0)]
-            .trace_with_stopper(PAULI_Z, 3 if 3 in bottom_left_open else 2)
-            .trace_with_stopper(PAULI_X, 2 if 3 in bottom_left_open else 1)
+            .trace_with_stopper(Legos.stopper_z, 3 if 3 in bottom_left_open else 2)
+            .trace_with_stopper(Legos.stopper_x, 2 if 3 in bottom_left_open else 1)
         )
 
         bottom_right_open = open_legs.get((last_row, last_col))
         nodes[(last_row, last_col)] = (
             nodes[(last_row, last_col)]
-            .trace_with_stopper(PAULI_Z, 0 if 0 in bottom_right_open else 1)
-            .trace_with_stopper(PAULI_X, 1 if 0 in bottom_right_open else 2)
+            .trace_with_stopper(Legos.stopper_z, 0 if 0 in bottom_right_open else 1)
+            .trace_with_stopper(Legos.stopper_x, 1 if 0 in bottom_right_open else 2)
         )
 
         # Apply stoppers to sides
@@ -72,13 +72,13 @@ class CompassCodeRotatedTN(TensorNetwork):
             for leg in top_open:
                 nodes[(0, c)] = (
                     nodes[(0, c)]
-                    .trace_with_stopper(PAULI_X, leg)
+                    .trace_with_stopper(Legos.stopper_x, leg)
                 )
             bottom_open = open_legs.get((last_row, c))
             for leg in bottom_open:
                 nodes[(last_row, c)] = (
                     nodes[(last_row, c)]
-                    .trace_with_stopper(PAULI_X, leg)
+                    .trace_with_stopper(Legos.stopper_x, leg)
                 )
         
         for r in range(1, last_row):
@@ -86,14 +86,14 @@ class CompassCodeRotatedTN(TensorNetwork):
             for leg in left_open:
                 nodes[(r, 0)] = (
                     nodes[(r, 0)]
-                    .trace_with_stopper(PAULI_Z, leg)
+                    .trace_with_stopper(Legos.stopper_z, leg)
                 )
 
             right_open = open_legs.get((r, last_col))
             for leg in right_open:
                 nodes[(r, last_col)] = (
                     nodes[(r, last_col)]
-                    .trace_with_stopper(PAULI_Z, leg)
+                    .trace_with_stopper(Legos.stopper_z, leg)
                 )
 
         super().__init__(nodes, truncate_length=truncate_length)

@@ -1,8 +1,8 @@
 from galois import GF2
 import numpy as np
-from qlego.legos import Legos
-from qlego.tensor_network import PAULI_X, PAULI_Z, PAULI_I, TensorNetwork
-from qlego.stabilizer_tensor_enumerator import StabilizerCodeTensorEnumerator
+from planqtn.legos import Legos
+from planqtn.tensor_network import TensorNetwork
+from planqtn.stabilizer_tensor_enumerator import StabilizerCodeTensorEnumerator
 
 
 class CompassCodeConcatenatedTN(TensorNetwork):
@@ -16,16 +16,16 @@ class CompassCodeConcatenatedTN(TensorNetwork):
     ):
         nodes = {}
         attachments = {}
-        nodes[(0,0)] = StabilizerCodeTensorEnumerator(Legos.x_rep_code(d+1), idx=(0,0))
+        nodes[(0,0)] = StabilizerCodeTensorEnumerator(Legos.x_rep_code(d+1), tensor_id=(0,0))
             
         for c in range(d):
-            nodes[(1,c)] = StabilizerCodeTensorEnumerator(Legos.z_rep_code(d+1), idx=(1,c))
+            nodes[(1,c)] = StabilizerCodeTensorEnumerator(Legos.z_rep_code(d+1), tensor_id=(1,c))
             for leg in range(d):
                 attachments[(leg,c)] = ((1, c), leg)
 
         nodes[(0, 0)] = (
             nodes[(0, 0)]
-            .trace_with_stopper(PAULI_I, d)
+            .trace_with_stopper(Legos.stopper_i, d)
         )
 
         connections_to_trace = set()
@@ -51,12 +51,12 @@ class CompassCodeConcatenatedTN(TensorNetwork):
                     if gap_above <= gap_below:
                         # Merge upward (use rows from start_row to end_row)
                         z_merge_key = ("z_merge", start_row, col)
-                        nodes[z_merge_key] = StabilizerCodeTensorEnumerator(Legos.z_rep_code(block_size), idx=z_merge_key)
+                        nodes[z_merge_key] = StabilizerCodeTensorEnumerator(Legos.z_rep_code(block_size), tensor_id=z_merge_key)
 
                         for offset, j in enumerate(range(start_row, end_row + 1)):
-                            nodes[("x1", j, col)] = StabilizerCodeTensorEnumerator(Legos.x_rep_code(3), idx=("x1", j, col))
-                            nodes[("z", j, col)] = StabilizerCodeTensorEnumerator(Legos.z_rep_code(3), idx=("z", j, col))
-                            nodes[("x2", j, col)] = StabilizerCodeTensorEnumerator(Legos.x_rep_code(3), idx=("x2", j, col))
+                            nodes[("x1", j, col)] = StabilizerCodeTensorEnumerator(Legos.x_rep_code(3), tensor_id=("x1", j, col))
+                            nodes[("z", j, col)] = StabilizerCodeTensorEnumerator(Legos.z_rep_code(3), tensor_id=("z", j, col))
+                            nodes[("x2", j, col)] = StabilizerCodeTensorEnumerator(Legos.x_rep_code(3), tensor_id=("x2", j, col))
 
                             connections_to_trace.add((("x1", j, col), ("z", j, col), 0, 1))
                             connections_to_trace.add((("z", j, col), ("x2", j, col), 0, 1))
@@ -75,12 +75,12 @@ class CompassCodeConcatenatedTN(TensorNetwork):
                     else:
                         extra_rows = next_one - (end_row + 1)
                         z_merge_key = ("z_merge", end_row + 1, col)
-                        nodes[z_merge_key] = StabilizerCodeTensorEnumerator(Legos.z_rep_code(extra_rows), idx=z_merge_key)
+                        nodes[z_merge_key] = StabilizerCodeTensorEnumerator(Legos.z_rep_code(extra_rows), tensor_id=z_merge_key)
 
                         for offset, j in enumerate(range(end_row + 1, next_one)):
-                            nodes[("x1", j, col)] = StabilizerCodeTensorEnumerator(Legos.x_rep_code(3), idx=("x1", j, col))
-                            nodes[("z", j, col)] = StabilizerCodeTensorEnumerator(Legos.z_rep_code(3), idx=("z", j, col))
-                            nodes[("x2", j, col)] = StabilizerCodeTensorEnumerator(Legos.x_rep_code(3), idx=("x2", j, col))
+                            nodes[("x1", j, col)] = StabilizerCodeTensorEnumerator(Legos.x_rep_code(3), tensor_id=("x1", j, col))
+                            nodes[("z", j, col)] = StabilizerCodeTensorEnumerator(Legos.z_rep_code(3), tensor_id=("z", j, col))
+                            nodes[("x2", j, col)] = StabilizerCodeTensorEnumerator(Legos.x_rep_code(3), tensor_id=("x2", j, col))
 
                             connections_to_trace.add((("x1", j, col), ("z", j, col), 0, 1))
                             connections_to_trace.add((("z", j, col), ("x2", j, col), 0, 1))
@@ -102,9 +102,9 @@ class CompassCodeConcatenatedTN(TensorNetwork):
 
             if(coloring[0][col] == 1 and coloring[-1][col] == 1):
                 print("adding non-isometry at col", col, "at top")
-                nodes[("x1", 0, col)] = StabilizerCodeTensorEnumerator(Legos.x_rep_code(3), idx=("x1", 0, col))
-                nodes[("z", 0, col)] = StabilizerCodeTensorEnumerator(Legos.z_rep_code(3), idx=("z", 0, col))
-                nodes[("x2", 0, col)] = StabilizerCodeTensorEnumerator(Legos.x_rep_code(3), idx=("x2", 0, col))
+                nodes[("x1", 0, col)] = StabilizerCodeTensorEnumerator(Legos.x_rep_code(3), tensor_id=("x1", 0, col))
+                nodes[("z", 0, col)] = StabilizerCodeTensorEnumerator(Legos.z_rep_code(3), tensor_id=("z", 0, col))
+                nodes[("x2", 0, col)] = StabilizerCodeTensorEnumerator(Legos.x_rep_code(3), tensor_id=("x2", 0, col))
 
                 connections_to_trace.add((("x1", 0, col), ("z", 0, col), 0, 1))
                 connections_to_trace.add((("z", 0, col), ("x2", 0, col), 0, 1))
@@ -132,7 +132,7 @@ class CompassCodeConcatenatedTN(TensorNetwork):
         for node in trace_with_stopper:
             self.nodes[node] = (
                 self.nodes[node]
-                .trace_with_stopper(PAULI_X, 2)
+                .trace_with_stopper(Legos.stopper_x, 2)
             )      
 
         self.n = d * d

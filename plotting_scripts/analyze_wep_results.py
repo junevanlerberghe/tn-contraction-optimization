@@ -457,24 +457,24 @@ def plot_distance_vs_ops_upper(df, filename):
     grouped = df.groupby(["representation", 'distance'])[['upper_bound_cost']].agg(['mean', 'std', 'size']).reset_index()
     representations = grouped["representation"].unique()
     
-    #grouped2 = df2.groupby(["name", 'distance'])[['custom_cost']].agg(['mean', 'std', 'size']).reset_index()
+    grouped2 = df.groupby(["representation", 'distance'])[['custom_cost']].agg(['mean', 'std', 'size']).reset_index()
 
     cmap = plt.get_cmap('tab10')  # or 'tab20', 'Set1', etc.
     color_dict = {rep: cmap(i % 10) for i, rep in enumerate(representations)}
 
     for rep in representations:
         rep_data = grouped[grouped["representation"] == rep]
-        #rep_data2 = grouped2[grouped2["name"] == rep]
+        rep_data2 = grouped2[grouped2["representation"] == rep]
 
         color = color_dict[rep]
 
         #plt.plot(rep_data['distance'], rep_data['upper_bound_cost']['mean'], label=f"{rep}, runs: {rep_data['upper_bound_cost']['size'].max()}", marker='o', color=color)
         yerr = rep_data["upper_bound_cost"]["std"]
-        plt.errorbar(rep_data['distance'], rep_data['upper_bound_cost']['mean'], yerr=yerr, marker='o', label=f"{rep}, runs: {rep_data['upper_bound_cost']['size'].max()}", capsize=5, color=color)
-        #plt.plot(rep_data2['distance'], rep_data2['custom_cost']['mean'], marker='o', linestyle='--', alpha=0.5, color=color)
+        #plt.errorbar(rep_data['distance'], rep_data['upper_bound_cost']['mean'], yerr=yerr, marker='o', label=f"{rep}, runs: {rep_data['upper_bound_cost']['size'].max()}", capsize=5, color=color)
+        plt.plot(rep_data2['distance'], rep_data2['custom_cost']['mean'], marker='o', linestyle='--', alpha=0.5, color=color)
 
-    plt.yscale('log') 
-    plt.xscale('log')
+    #plt.yscale('log') 
+    #plt.xscale('log')
     plt.xlabel('Distance')
     plt.ylabel('Upper Bound Cost')
     plt.title('Distance vs Upper Bound Cost by Name')
@@ -500,10 +500,10 @@ plot_distance_vs_ops_for_qshor(merged, "distance_vs_ops_log.png", q_shor=1.0)'''
 '''df = pd.read_csv('custom_optimization_tests/combo_cotengra_with_many_max_repeats.csv', sep=';')
 plot_cot_trials_vs_operations(df, "max_repeats_combo_d3.png")'''
 
-df = pd.read_csv('upper_bound_results.csv', sep=';')
-#df2 = pd.read_csv('custom_cost_calc_ds.csv', sep=';')
+df = pd.read_csv('upper_bound_and_custom_with_custom_cost.csv', sep=';')
+#df2 = pd.read_csv('old_scripts/custom_cost_calc_ds.csv', sep=';')
 #df2['custom_cost'] = np.log2(df2['custom_cost'].astype('object').apply(float))
-plot_distance_vs_ops_upper(df, "distance_vs_ops_upper_bound.png")
+plot_distance_vs_ops_upper(df, "distance_vs_ops_upper_bound_new.png")
 
 #df = pd.read_csv('outputs/data/wep_calcs_full.csv', sep=';')
 #plot_distance_vs_time_for_qshor(df, "distance_vs_time_for_surface_500_semilog.png", q_shor=0.0)
