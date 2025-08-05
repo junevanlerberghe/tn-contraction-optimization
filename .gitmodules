@@ -3,4 +3,4 @@
 	url = https://github.com/junevanlerberghe/planqtn.git
 [submodule "cotengra"]
 	path = cotengra
-	url = https://github.com/jcmgray/cotengra.git
+	url = https://github.com/junevanlerberghe/cotengra.git
