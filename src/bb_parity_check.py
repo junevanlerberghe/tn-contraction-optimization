@@ -19,7 +19,6 @@ def make_y_matrix(l: int, m: int):
     identity = make_identity(l)
     return np.kron(identity, s)
 
-
 def make_x_matrix(l: int, m: int):
     s = make_cyclic_shift_matrix(l)
     identity = make_identity(m)

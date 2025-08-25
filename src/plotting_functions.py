@@ -4,49 +4,69 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
 
+def add_brute_force_costs(df):
+    mapping = {
+        ("Concatenated", 9): 2**(9 - 1),
+        ("Concatenated", 25): 2**(25 - 1),
+        ("Concatenated", 49): 2**(49 - 1),
+        ("Rotated Surface", 9): 2**(9 - 1),
+        ("Rotated Surface", 25): 2**(25 - 1),
+        ("Rotated Surface", 49): 2**(49 - 1),
+        ("Rotated Surface", 81): 2**(81 - 1),
+        ("Rotated Surface MSP", 9): 2**(9 - 1),
+        ("Rectangular Surface", 9): 2**(9 - 1),
+        ("Rectangular Surface", 15): 2**(15 - 1),
+        ("Rectangular Surface", 21): 2**(21 - 1),
+        ("Hamming MSP", 7): 2**(7 - 1),
+        ("Hamming MSP", 15): 2**(15 - 7),
+        ("Hamming MSP", 31): 2**(31 - 21),
+        ("Holographic", 25) : 2**(25 - 11),
+        ("Holographic", 95) : 2**(95 - 51),
+        ("BB MSP", 18): 2**(18 - 4),
+        ("BB MSP", 30): 2**(30 - 4),
+    }
+    df["brute_force_cost"] = df.set_index(["network", "num_qubits"]).index.map(mapping)
+    return df
 
-def merge_data(df_default, df_custom):
-    default_stats = (
-        df_default.groupby(["representation", "num_qubits", "brute_force"])["operations_w_bruteforce"]
-        .agg(default_avg_ops='mean', default_std_ops='std', default_num_rows='count')
+
+def plot_improvement_factor_bar_chart(contraction_cost_file, out_file="bar_chart_comparison.png"):
+    df = pd.read_csv(contraction_cost_file, sep=";")
+
+    grouped_df = (
+        df.groupby(["network", "num_qubits", "cost_fn"])["operations"]
+        .agg(avg_ops='mean', std_ops='std', num_rows='count')
         .reset_index()
     )
-
-    custom_stats = (
-        df_custom.groupby(["representation", "num_qubits", "brute_force"])["operations_w_bruteforce"]
-        .agg(custom_avg_ops='mean', custom_std_ops='std', custom_num_rows='count')
-        .reset_index()
-    )
-
-    final_df = pd.merge(default_stats, custom_stats, on=["representation", "num_qubits", "brute_force"])
-    final_df = final_df.sort_values("default_avg_ops", ascending=False)
-    return final_df
-
-
-def plot_improvement_factor_bar_chart(default_data_file, custom_data_file, out_file="bar_chart_comparison.png"):
-    df_default = pd.read_csv(default_data_file, sep=";")
-    df_custom = pd.read_csv(custom_data_file, sep=";")
     
-    final_df = merge_data(df_default, df_custom)
+    final_df = grouped_df.pivot_table(
+        index=["network", "num_qubits"],
+        columns="cost_fn",
+        values="avg_ops"
+    ).reset_index()
+
+    final_df = add_brute_force_costs(final_df)
+    print(final_df)
 
     # Calculated improvement factors 
-    final_df["improvement_bruteforce_custom"] = final_df["brute_force"].astype(float) / final_df["custom_avg_ops"]
-    final_df["improvement_bruteforce_default"] = final_df["brute_force"].astype(float) / final_df["default_avg_ops"]
-    final_df["improvement_default_custom"] = final_df["default_avg_ops"] / final_df["custom_avg_ops"]
+    final_df["improvement_bruteforce_custom"] = final_df["brute_force_cost"].astype(float) / final_df["custom"]
+    final_df["improvement_bruteforce_default"] = final_df["brute_force_cost"].astype(float) / final_df["combo"]
+    final_df["improvement_default_custom"] = final_df["combo"] / final_df["custom"]
+
+    print(final_df)
 
     # Sort by representation based on smallest improvement factor
     rep_order = (
-        final_df.groupby("representation")["improvement_bruteforce_custom"]
+        final_df.groupby("network")["improvement_bruteforce_custom"]
         .min()   
         .sort_values()  
         .index
     )
-    final_df["representation"] = pd.Categorical(final_df["representation"], categories=rep_order, ordered=True)
-    final_df = final_df.sort_values(["representation", "num_qubits"], ascending=[True, True])
+    final_df["network"] = pd.Categorical(final_df["network"], categories=rep_order, ordered=True)
+    final_df = final_df.sort_values(["network", "num_qubits"], ascending=[True, True])
     final_df.reset_index(inplace=True)
 
     # Define colors based on representation
-    reps = final_df["representation"].unique()
+    reps = final_df["network"].unique()
     cmap = cm.get_cmap("tab10", len(reps))
     rep_colors = {rep: cmap(i) for i, rep in enumerate(reps)}
 
@@ -60,8 +80,8 @@ def plot_improvement_factor_bar_chart(default_data_file, custom_data_file, out_f
         bar_err = max(row["improvement_bruteforce_custom"], row["improvement_bruteforce_default"])
         y = bar_height + bar_err + 0.05 * bar_height
 
-        base_color = rep_colors[row["representation"]]
-        groups.setdefault(row["representation"], []).append(i)
+        base_color = rep_colors[row["network"]]
+        groups.setdefault(row["network"], []).append(i)
 
         ax.bar(i - width/2, row["improvement_bruteforce_custom"], width, color=mcolors.to_rgba(base_color), edgecolor="black", label=f"Custom Stabilizer Cost" if i == 0 else "")
         ax.bar(i + width/2, row["improvement_bruteforce_default"], width, color=mcolors.to_rgba(base_color), edgecolor="black", alpha=0.4, label=f"Default Combo Cost" if i == 0 else "")
@@ -75,7 +95,7 @@ def plot_improvement_factor_bar_chart(default_data_file, custom_data_file, out_f
     ax.axhline(1, color="red", linestyle="--", label="No improvement")
     ax.set_xticks(np.arange(len(final_df)))
     ax.set_xticklabels(
-        [f"n={nq}" for rep, nq in zip(final_df['representation'], final_df['num_qubits'])]
+        [f"n={nq}" for rep, nq in zip(final_df['network'], final_df['num_qubits'])]
     )
     ax.set_ylabel("Default Operations / Cotengra")
     ax.set_yscale("log")
@@ -118,16 +138,20 @@ def plot_operations_comparison_scatter(default_data_file, custom_data_file, out_
         ax.set_yscale("log")
         ax.grid(True)
 
-    plot_by_rep(df, "Combo Cotengra Cost", axs[0], "")
-    plot_by_rep(df_custom, "Custom Stabilizer Cost", axs[1], "")
+    plot_by_rep(df, "Combo Cotengra Cost", axs[0])
+    plot_by_rep(df_custom, "Custom Stabilizer Cost", axs[1])
     axs[0].set_ylabel("Operations", fontsize=14)
 
     handles, labels = axs[0].get_legend_handles_labels()
 
     # Add one legend for the whole figure
-    fig.legend(handles, labels, bbox_to_anchor=(0.07, 0.9), loc='upper left', ncol=1, fontsize=14)
+    fig.legend(handles, labels, bbox_to_anchor=(0.07, 0.9), loc='upper left', ncol=1, fontsize=12)
 
     fig.suptitle("Contraction Cost (Operations) vs Cotengra Costs", fontsize=16)
     plt.tight_layout()
     plt.savefig(out_file)
     plt.close()
+
+
+plot_improvement_factor_bar_chart("contraction_costs.csv",
+                                "bar_chart_greedy.png")
