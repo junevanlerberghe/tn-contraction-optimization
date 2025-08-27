@@ -20,8 +20,8 @@ from planqtn.tensor_network import TensorNetwork
 from planqtn.stabilizer_code_cost_fn import StabilizerCodeCostVisitor
 from planqtn.upper_bound_cost_visitor import UpperBoundCostVisitor
 
-from bb_parity_check import create_coprime_parity_check, create_full_parity_check
-from utils import generate_checkerboard_coloring, generate_hamming_parity_check
+from bb_parity_check import create_full_parity_check
+from utils import generate_hamming_parity_check
 from planqtn.progress_reporter import TqdmProgressReporter
 from planqtn.progress_reporter import DummyProgressReporter, ProgressReporter
 from planqtn.stabilizer_tensor_enumerator import _index_leg
@@ -112,6 +112,7 @@ def run_contraction_cost_experiment(networks: Dict[Tuple[str, int], TensorNetwor
             tn = creation_fn()
            
             print(f"Finding contraction cost for {name}, run {i+1}")
+            print(tn.nodes)
             upper_bound_cost, custom_cost, max_tensor_size, cotengra_score, tensor_sparsities = find_contraction_cost(tn, minimize=minimize, verbose=False, progress_reporter=TqdmProgressReporter(), cotengra=True)
 
             with open(file_name, "a") as f:
@@ -171,7 +172,7 @@ def make_all_tensor_networks(concatenated=True, rotated_surface=True, hamming=Tr
 
         for i in range(len(ls)):
             H_bb = create_full_parity_check(ls[i], ms[i], a_s[i], bs[i])
-            tensor_networks[("BB MSP", n_qubits[i])] = lambda H_bb=H_bb: StabilizerMeasurementStatePrepTN(H_coprime)
+            tensor_networks[("BB MSP", n_qubits[i])] = lambda H_bb=H_bb: StabilizerMeasurementStatePrepTN(H_bb)
 
 
     return tensor_networks
@@ -186,8 +187,8 @@ def run_all_contraction_cost_experiments(num_runs=100, file_name="contraction_co
         tn (bool): Whether to include the given tensor network in the experiments.
     """
     
-    # tensor_networks = make_all_tensor_networks(concatenated, rotated_surface, hamming, holo, bb)
-    # run_contraction_cost_experiment(tensor_networks, num_runs, file_name, minimize="custom_flops")
+    tensor_networks = make_all_tensor_networks(concatenated, rotated_surface, hamming, holo, bb)
+    run_contraction_cost_experiment(tensor_networks, num_runs, file_name, minimize="custom_flops")
 
     tensor_networks = make_all_tensor_networks(concatenated, rotated_surface, hamming, holo, bb)
     run_contraction_cost_experiment(tensor_networks, num_runs, file_name, minimize="custom_max_size")
@@ -220,4 +221,4 @@ def find_sparsity_information(num_runs=10, file_name="tensor_sparsity_info.csv",
 
 
 if __name__ == "__main__":
-    run_all_contraction_cost_experiments(num_runs=15, file_name="contraction_costs_with_max.csv", concatenated=True, rotated_surface=True, hamming=True, holo=True, bb=True)
+    run_all_contraction_cost_experiments(num_runs=2, file_name="contraction_costs_bb_test.csv", concatenated=False, rotated_surface=False, hamming=False, holo=False, bb=True)

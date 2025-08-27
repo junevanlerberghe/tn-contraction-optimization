@@ -145,7 +145,7 @@ def plot_operations_comparison_scatter(default_data_file, custom_data_file, out_
     handles, labels = axs[0].get_legend_handles_labels()
 
     # Add one legend for the whole figure
-    fig.legend(handles, labels, bbox_to_anchor=(0.07, 0.9), loc='upper left', ncol=1, fontsize=12)
+    fig.legend(handles, labels, bbox_to_anchor=(0.09, 0.9), loc='upper left', ncol=1, fontsize=12)
 
     fig.suptitle("Contraction Cost (Operations) vs Cotengra Costs", fontsize=16)
     plt.tight_layout()
@@ -153,5 +153,66 @@ def plot_operations_comparison_scatter(default_data_file, custom_data_file, out_
     plt.close()
 
 
-plot_improvement_factor_bar_chart("contraction_costs.csv",
-                                "bar_chart_greedy.png")
+def plot_operations_scatter_same_plot(default_data_file, custom_data_file, out_file="scatter_comparison.png"):
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    df_default = pd.read_csv(default_data_file, sep=";")
+    df_custom = pd.read_csv(custom_data_file, sep=";")
+
+    # keep all rows with the minimal num_qubits for each representation
+    df_default = df_default[df_default.groupby("representation")["num_qubits"].transform("min") == df_default["num_qubits"]]
+    df_custom = df_custom[df_custom.groupby("representation")["num_qubits"].transform("min") == df_custom["num_qubits"]]
+
+    # Unique representations
+    representations = sorted(set(df_default["representation"]).union(df_custom["representation"]))
+
+    # Assign each rep a color
+    colors = plt.cm.tab10.colors
+    color_map = {rep: colors[i % len(colors)] for i, rep in enumerate(representations)}
+
+    # Plot default with circles
+    for rep in representations:
+        subdf = df_default[df_default["representation"] == rep]
+        nq = int(subdf["num_qubits"].iloc[0])
+        ax.scatter(
+            2**subdf["score_cotengra"],
+            subdf["operations"],
+            label=f"{rep} (default), n={nq}",
+            color=color_map[rep],
+            alpha=0.4,
+            marker="x"   # circle
+        )
+
+    # Plot custom with squares
+    for rep in representations:
+        subdf = df_custom[df_custom["representation"] == rep]
+        nq = int(subdf["num_qubits"].iloc[0]) 
+        ax.scatter(
+            2**subdf["score_cotengra"],
+            subdf["operations"],
+            label=f"{rep} (custom), n={nq}",
+            color=color_map[rep],
+            marker="s"   # square
+        )
+
+    # Axes formatting
+    ax.set_xlabel("Cotengra Cost", fontsize=14)
+    ax.set_ylabel("Operations", fontsize=14)
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.grid(True)
+
+    # Legend
+    ax.legend(fontsize=10, bbox_to_anchor=(1.05, 1), loc="upper left")
+
+    # Title + layout
+    fig.suptitle("Contraction Cost (Operations) vs Cotengra Cost", fontsize=16)
+    plt.tight_layout()
+    plt.savefig(out_file, bbox_inches="tight")
+    plt.close()
+
+
+
+plot_operations_scatter_same_plot("outputs/results_8_14/tn_architectures_calc_default.csv",
+                                   "outputs/results_8_14/tn_architectures_calc.csv",
+                                "scatter_results_both.png")
