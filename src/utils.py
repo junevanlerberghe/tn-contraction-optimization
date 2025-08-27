@@ -1,7 +1,6 @@
 import itertools
 import numpy as np
 
-
 def generate_checkerboard_coloring(d, L=None):
     if(L is None):
         L = d
