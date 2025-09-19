@@ -1,5 +1,46 @@
-from typing import Callable, List, Tuple, Union
+from typing import List, Tuple, Union
 import numpy as np
+
+PolyTerm = Tuple[str, Union[int, Tuple[int, int]]]
+
+# Each preset is just the (l, m, a, b) tuple
+BB_PRESETS = {
+    18: {
+        "l": 3,
+        "m": 3,
+        "a": [("x", 1), ("y", 0), ("y", 2)],
+        "b": [("y", 1), ("x", 0), ("x", 2)],
+    },
+    30: {
+        "l": 3,
+        "m": 5,
+        "a": [("xy", (0, 0)), ("xy", (1, 1)), ("xy", (2, 2))],
+        "b": [("xy", (0, 0)), ("xy", (2, 2)), ("xy", (1, 2))],
+    },
+    72: {
+        "l": 6,
+        "m": 6,
+        "a": [("x", 3), ("y", 1), ("y", 2)],
+        "b": [("y", 3), ("x", 1), ("x", 2)],
+    },
+    144: {
+        "l": 12,
+        "m": 6,
+        "a": [("x", 3), ("y", 1), ("y", 2)],
+        "b": [("y", 3), ("x", 1), ("x", 2)],
+    },
+    288: {
+        "l": 12,
+        "m": 12,
+        "a": [("x", 3), ("y", 2), ("y", 7)],
+        "b": [("y", 3), ("x", 1), ("x", 2)],
+    },
+}
+
+def get_bb_params(num_qubits: int) -> tuple[int, int, List[PolyTerm], List[PolyTerm]]:
+    """Return (l, m, a, b) for a given named BB code."""
+    preset = BB_PRESETS[num_qubits]
+    return preset["l"], preset["m"], preset["a"], preset["b"]
 
 
 def make_cyclic_shift_matrix(l: int) -> np.ndarray:
@@ -24,7 +65,6 @@ def make_xy_matrix(l: int, m: int, px: int, py: int) -> np.ndarray:
     return (X @ Y) % 2
 
 
-PolyTerm = Tuple[str, Union[int, Tuple[int, int]]]
 
 
 def term_to_matrix(l: int, m: int, term: PolyTerm) -> np.ndarray:

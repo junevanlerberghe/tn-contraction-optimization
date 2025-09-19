@@ -2,17 +2,23 @@ import csv
 import sys
 import os
 from collections import defaultdict
+import time
 import numpy as np
 from typing import Dict, List, Tuple
 
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "planqtn"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from planqtn.networks.stabilizer_tanner_code import StabilizerTannerCodeTN
+
+# from compassCodes.holographic import HolographicHappyTN
 from planqtn.contraction_visitors.max_size_cost_visitor import MaxTensorSizeCostVisitor
 
 from planqtn.linalg import gauss
+from compassCodes.compass_code_concatenated import CompassCodeConcatenatedTN, RepCodeTreeConcatenatedTN
+
 from planqtn.contraction_visitors.sparsity_visitor import SparsityVisitor
-from planqtn.networks.compass_code import CompassCodeConcatenateAndSparsifyTN
-from planqtn.networks.holographic_happy_code import HolographicHappyTN
+# from planqtn.networks.compass_code import CompassCodeConcatenateAndSparsifyTN
+# from planqtn.networks.holographic_happy_code import HolographicHappyTN
 from planqtn.networks.rotated_surface_code import RotatedSurfaceCodeTN
 from planqtn.networks.stabilizer_measurement_state_prep import (
     StabilizerMeasurementStatePrepTN,
@@ -20,11 +26,11 @@ from planqtn.networks.stabilizer_measurement_state_prep import (
 
 from planqtn.tensor_network import TensorNetwork
 from planqtn.contraction_visitors.stabilizer_flops_cost_fn import (
-    StabilizerCodeCostVisitor,
+    StabilizerCodeFlopsCostVisitor,
 )
 from planqtn.contraction_visitors.upper_bound_cost_visitor import UpperBoundCostVisitor
 
-from bb_parity_check import create_full_parity_check
+from bb_parity_check import create_full_parity_check, get_bb_params
 from utils import generate_hamming_parity_check
 from planqtn.progress_reporter import TqdmProgressReporter
 from planqtn.progress_reporter import DummyProgressReporter, ProgressReporter
@@ -34,6 +40,8 @@ from planqtn.stabilizer_tensor_enumerator import _index_leg
 def find_contraction_cost(
     tn: TensorNetwork,
     minimize: str = "custom_flops",
+    methods: List[str] = ["greedy"],
+    search_params: Dict = {},
     open_legs: List[Tuple[int, int]] = [],
     verbose: bool = False,
     progress_reporter: ProgressReporter = DummyProgressReporter(),
@@ -58,18 +66,6 @@ def find_contraction_cost(
         progress_reporter is not None
     ), "Progress reporter must be provided, it is None"
 
-    with progress_reporter.enter_phase("collecting legs"):
-        free_legs, leg_indices, index_to_legs = tn._collect_legs()
-
-    open_legs_per_node = defaultdict(list)
-    for node_idx, node in tn.nodes.items():
-        for leg in node.legs:
-            if leg not in free_legs:
-                open_legs_per_node[node_idx].append(_index_leg(node_idx, leg))
-
-    for node_idx, leg_index in open_legs:
-        open_legs_per_node[node_idx].append(_index_leg(node_idx, leg_index))
-
     brute_force_operations = 0
     for node_idx, node in tn.nodes.items():
         h_reduced = gauss(node.h)
@@ -77,26 +73,18 @@ def find_contraction_cost(
         r = len(h_reduced)
         brute_force_operations += 2**r
 
-    if cotengra and len(tn.nodes) > 0 and len(tn._traces) > 0:
-        with progress_reporter.enter_phase("cotengra contraction"):
-            traces, tree = tn._cotengra_contraction(
-                free_legs,
-                leg_indices,
-                index_to_legs,
-                open_legs_per_node,
-                verbose,
-                progress_reporter,
-                max_repeats=300,
-                minimize=minimize,
-            )
-            cotengra_score = tree.get_score()
+    cost_visitor = StabilizerCodeFlopsCostVisitor()
+    upper_bound_visitor = UpperBoundCostVisitor()
+    sparsity_visitor = SparsityVisitor()
+    max_size_visitor = MaxTensorSizeCostVisitor()
 
-    tn._traces = traces
-    cost_visitor = StabilizerCodeCostVisitor(open_legs_per_node)
-    upper_bound_visitor = UpperBoundCostVisitor(open_legs_per_node)
-    sparsity_visitor = SparsityVisitor(open_legs_per_node)
-    max_size_visitor = MaxTensorSizeCostVisitor(open_legs_per_node)
+    search_params = {
+        "greedy_minimizer": "custom_flops",
+        "optimal_minimizer": "custom_flops",
+        "sub_optimize_minimizer": "custom_flops",
+    }
 
+    start = time.time()
     tn.conjoin_nodes(
         verbose=verbose,
         visitors=[
@@ -105,16 +93,22 @@ def find_contraction_cost(
             sparsity_visitor,
             max_size_visitor,
         ],
+        cotengra=cotengra,
+        open_legs=open_legs,
+        cotengra_opts={"minimize": minimize, "methods": methods},
+        progress_reporter=progress_reporter,
     )
+    end = time.time()
     upper_bound_cost = upper_bound_visitor.total_cost + brute_force_operations
     contraction_cost = cost_visitor.total_cost + brute_force_operations
 
     return (
         upper_bound_cost,
+        cost_visitor.total_cost,
         contraction_cost,
         max_size_visitor.max_size,
-        cotengra_score,
         sparsity_visitor.tensor_sparsity,
+        end - start,
     )
 
 
@@ -123,6 +117,7 @@ def run_contraction_cost_experiment(
     num_runs,
     file_name,
     minimize="custom",
+    methods=["greedy"]
 ):
     """Run contraction cost experiments for the given tensor networks and save results to a CSV file.
 
@@ -137,14 +132,16 @@ def run_contraction_cost_experiment(
             writer.writerow(
                 [
                     "cost_fn",
+                    "methods",
                     "tensor_network",
                     "num_qubits",
                     "num_run",
                     "upper_bound_cost",
                     "operations",
+                    "operations_with_bruteforce",
                     "max_tensor_size",
-                    "cotengra_score",
                     "avg_tensor_sparsity",
+                    "time"
                 ]
             )
 
@@ -154,34 +151,40 @@ def run_contraction_cost_experiment(
             tn = creation_fn()
 
             print(f"Finding contraction cost for {name}, run {i+1}")
-            print(tn.nodes)
+
             (
                 upper_bound_cost,
                 custom_cost,
+                cost_with_bruteforce,
                 max_tensor_size,
-                cotengra_score,
                 tensor_sparsities,
+                cotengra_duration
             ) = find_contraction_cost(
                 tn,
                 minimize=minimize,
+                methods=methods,
                 verbose=False,
                 progress_reporter=TqdmProgressReporter(),
                 cotengra=True,
             )
+        
+            sparsities = [s[-1] for s in tensor_sparsities]
 
             with open(file_name, "a") as f:
                 writer = csv.writer(f, delimiter=";")
                 writer.writerow(
                     [
                         minimize,
+                        methods,
                         name,
                         num_qubits,
-                        i,
+                        i + 100,
                         upper_bound_cost,
                         custom_cost,
+                        cost_with_bruteforce,
                         max_tensor_size,
-                        cotengra_score,
-                        np.mean(tensor_sparsities),
+                        round(np.mean(sparsities), 5),
+                        cotengra_duration
                     ]
                 )
 
@@ -191,15 +194,14 @@ def make_all_tensor_networks(
 ):
     tensor_networks = {}
 
-    for d in [3, 5, 7, 9]:
-        # Symmetric Tree Tensor Network (Concatenated Shor's - [[d^2,1,d]]):
+    for layer in [2, 3, 4]:
+        # Symmetric Tree Tensor Network (Concatenated Repetition):
         if concatenated:
-            tensor_networks[("Concatenated Shor's", d**2)] = (
-                lambda d=d: CompassCodeConcatenateAndSparsifyTN(
-                    np.full((d - 1, d - 1), 2)
-                )
+            tensor_networks[("Concatenated Repetition", 3**layer)] = (
+                lambda layer=layer: RepCodeTreeConcatenatedTN(layer)
             )
 
+    for d in [3, 5, 7]:
         # Rotated Surface Code - [[d^2,1,d]]
         if rotated_surface:
             tensor_networks[("Rotated Surface", d**2)] = (
@@ -214,12 +216,22 @@ def make_all_tensor_networks(
                 lambda H_surface=H_surface: StabilizerMeasurementStatePrepTN(H_surface)
             )
 
+            H_surface = RotatedSurfaceCodeTN(d).conjoin_nodes().h
+            tensor_networks[("Rotated Surface Tanner", d**2)] = (
+                lambda H_surface=H_surface: StabilizerTannerCodeTN(H_surface)
+            )
+
     # MSP for Hamming Code (non-degenerate) -- [[7,1,3]], [[15,7,3]], [[31,21,3]]
     if hamming:
-        rs = [3, 4]
-        for r in rs:
+        for r in [3, 4]:
             tensor_networks[("Hamming MSP", 2**r - 1)] = (
                 lambda r=r: StabilizerMeasurementStatePrepTN(
+                    generate_hamming_parity_check(r)
+                )
+            )
+
+            tensor_networks[("Hamming Tanner", 2**r - 1)] = (
+                lambda r=r: StabilizerTannerCodeTN(
                     generate_hamming_parity_check(r)
                 )
             )
@@ -235,29 +247,13 @@ def make_all_tensor_networks(
 
     # BB Code MSP
     if bb:
-        # BB Codes (in order): [[18,4,4]], [[30,4,6]], [[72,12,6]], [[144,12,12]], [[288,12,18]]
-        ls = [3, 3, 6, 12, 12]
-        ms = [3, 5, 6, 6, 12]
-        a_s = [
-            [("x", 1), ("y", 0), ("y", 2)],
-            [("xy", (0, 0)), ("xy", (1, 1)), ("xy", (2, 2))],
-            [("x", 3), ("y", 1), ("y", 2)],
-            [("x", 3), ("y", 1), ("y", 2)],
-            [("x", 3), ("y", 2), ("y", 7)],
-        ]
-        bs = [
-            [("y", 1), ("x", 0), ("x", 2)],
-            [("xy", (0, 0)), ("xy", (2, 2)), ("xy", (1, 2))],
-            [("y", 3), ("x", 1), ("x", 2)],
-            [("y", 3), ("x", 1), ("x", 2)],
-            [("y", 3), ("x", 1), ("x", 2)],
-        ]
+        bb_codes = [18, 30]
 
-        n_qubits = [18, 30, 72, 144, 288]
+        for i in range(len(bb_codes)):
+            l, m, a, b = get_bb_params(bb_codes[i])
+            H_bb = create_full_parity_check(l, m, a, b)
 
-        for i in range(len(ls)):
-            H_bb = create_full_parity_check(ls[i], ms[i], a_s[i], bs[i])
-            tensor_networks[("BB MSP", n_qubits[i])] = (
+            tensor_networks[("BB MSP", bb_codes[i])] = (
                 lambda H_bb=H_bb: StabilizerMeasurementStatePrepTN(H_bb)
             )
 
@@ -285,26 +281,33 @@ def run_all_contraction_cost_experiments(
         concatenated, rotated_surface, hamming, holo, bb
     )
     run_contraction_cost_experiment(
-        tensor_networks, num_runs, file_name, minimize="custom_flops"
+        tensor_networks, num_runs, file_name, minimize="custom_flops", methods=["kahypar"]
     )
 
     tensor_networks = make_all_tensor_networks(
         concatenated, rotated_surface, hamming, holo, bb
     )
     run_contraction_cost_experiment(
-        tensor_networks, num_runs, file_name, minimize="custom_max_size"
+        tensor_networks, num_runs, file_name, minimize="custom_flops", methods=["greedy"]
     )
 
     tensor_networks = make_all_tensor_networks(
         concatenated, rotated_surface, hamming, holo, bb
     )
     run_contraction_cost_experiment(
-        tensor_networks, num_runs, file_name, minimize="combo"
+        tensor_networks, num_runs, file_name, minimize="combo", methods=["greedy"]
+    ) 
+
+    tensor_networks = make_all_tensor_networks(
+        concatenated, rotated_surface, hamming, holo, bb
+    )
+    run_contraction_cost_experiment(
+        tensor_networks, num_runs, file_name, minimize="combo", methods=["kahypar"]
     )
 
 
 def find_sparsity_information(
-    num_runs=10, file_name="tensor_sparsity_info.csv", minimize="custom"
+    num_runs=10, file_name="tensor_sparsity_info.csv", minimize="custom_flops"
 ):
     tensor_networks = make_all_tensor_networks()
 
@@ -312,16 +315,16 @@ def find_sparsity_information(
         with open(file_name, "w") as f:
             writer = csv.writer(f, delimiter=";")
             writer.writerow(
-                ["cost_fn", "network", "num_qubits", "num_run", "tensor_sparsity"]
+                ["cost_fn", "network", "num_qubits", "num_run", "num_open_legs", "actual_tensor_size", "dense_tensor_size", "tensor_sparsity"]
             )
 
     for key, creation_fn in tensor_networks.items():
         for i in range(num_runs):
             name, num_qubits = key
             tn = creation_fn()
-            print(tn.nodes)
+
             print(f"Finding contraction cost for {name}, run {i+1}")
-            _, _, _, _, tensor_sparsities = find_contraction_cost(
+            _, _, _, tensor_sparsities, _ = find_contraction_cost(
                 tn,
                 minimize=minimize,
                 verbose=False,
@@ -329,19 +332,18 @@ def find_sparsity_information(
                 cotengra=True,
             )
 
-            for sparsity in tensor_sparsities:
+            for open_legs, new_size, dense_size, sparsity in tensor_sparsities:
                 with open(file_name, "a") as f:
                     writer = csv.writer(f, delimiter=";")
-                    writer.writerow([minimize, name, num_qubits, i, sparsity])
+                    writer.writerow([minimize, name, num_qubits, i, open_legs, new_size, dense_size, sparsity])
 
 
 if __name__ == "__main__":
     run_all_contraction_cost_experiments(
-        num_runs=2,
-        file_name="contraction_costs_bb_test.csv",
+        num_runs=10,
         concatenated=False,
-        rotated_surface=False,
+        rotated_surface=True,
         hamming=False,
         holo=False,
-        bb=True,
+        bb=False,
     )

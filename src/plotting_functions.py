@@ -1,3 +1,4 @@
+import math
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -7,9 +8,9 @@ import matplotlib.cm as cm
 
 def add_brute_force_costs(df):
     mapping = {
-        ("Concatenated", 9): 2 ** (9 - 1),
-        ("Concatenated", 25): 2 ** (25 - 1),
-        ("Concatenated", 49): 2 ** (49 - 1),
+        ("Concatenated Repetition", 9): 2 ** (9 - 1),
+        ("Concatenated Repetition", 27): 2 ** (27 - 1),
+        ("Concatenated Repetition", 81): 2 ** (81 - 1),
         ("Rotated Surface", 9): 2 ** (9 - 1),
         ("Rotated Surface", 25): 2 ** (25 - 1),
         ("Rotated Surface", 49): 2 ** (49 - 1),
@@ -26,7 +27,7 @@ def add_brute_force_costs(df):
         ("BB MSP", 18): 2 ** (18 - 4),
         ("BB MSP", 30): 2 ** (30 - 4),
     }
-    df["brute_force_cost"] = df.set_index(["network", "num_qubits"]).index.map(mapping)
+    df["brute_force_cost"] = df.set_index(["tensor_network", "num_qubits"]).index.map(mapping)
     return df
 
 
@@ -34,110 +35,127 @@ def plot_improvement_factor_bar_chart(
     contraction_cost_file, out_file="bar_chart_comparison.png"
 ):
     df = pd.read_csv(contraction_cost_file, sep=";")
+    df = df[df["methods"] != "['labels']"]
 
-    grouped_df = (
-        df.groupby(["network", "num_qubits", "cost_fn"])["operations"]
-        .agg(avg_ops="mean", std_ops="std", num_rows="count")
-        .reset_index()
-    )
+    methods = sorted(df["methods"].unique())
+    print("methods are:", methods)
+    n_methods = len(methods)
+    ncols = 1
+    nrows = math.ceil(n_methods / ncols)
 
-    final_df = grouped_df.pivot_table(
-        index=["network", "num_qubits"], columns="cost_fn", values="avg_ops"
-    ).reset_index()
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(14, 6 * nrows))
+    # axes = axes.flatten()
 
-    final_df = add_brute_force_costs(final_df)
-    print(final_df)
+    for idx, method in enumerate(methods):
+        # ax = axes[idx]
+        ax = axes
+        df_m = df[df["methods"] == method]
+        df_m = df_m[~((df_m["tensor_network"] == "Hamming MSP") & (df_m["num_qubits"] == 31))]
+        df_m = df_m[~((df_m["tensor_network"] == "Rotated Surface MSP") & (df_m["num_qubits"] == 25))]
 
-    # Calculated improvement factors
-    final_df["improvement_bruteforce_custom"] = (
-        final_df["brute_force_cost"].astype(float) / final_df["custom"]
-    )
-    final_df["improvement_bruteforce_default"] = (
-        final_df["brute_force_cost"].astype(float) / final_df["combo"]
-    )
-    final_df["improvement_default_custom"] = final_df["combo"] / final_df["custom"]
-
-    print(final_df)
-
-    # Sort by representation based on smallest improvement factor
-    rep_order = (
-        final_df.groupby("network")["improvement_bruteforce_custom"]
-        .min()
-        .sort_values()
-        .index
-    )
-    final_df["network"] = pd.Categorical(
-        final_df["network"], categories=rep_order, ordered=True
-    )
-    final_df = final_df.sort_values(["network", "num_qubits"], ascending=[True, True])
-    final_df.reset_index(inplace=True)
-
-    # Define colors based on representation
-    reps = final_df["network"].unique()
-    cmap = cm.get_cmap("tab10", len(reps))
-    rep_colors = {rep: cmap(i) for i, rep in enumerate(reps)}
-
-    fig, ax = plt.subplots(figsize=(14, 8))
-    width = 0.35  # width of the bars
-    groups = {}
-
-    for i, row in final_df.iterrows():
-        # Determine the height for placing the text above the bars
-        bar_height = max(
-            row["improvement_bruteforce_custom"], row["improvement_bruteforce_default"]
-        )
-        bar_err = max(
-            row["improvement_bruteforce_custom"], row["improvement_bruteforce_default"]
-        )
-        y = bar_height + bar_err + 0.05 * bar_height
-
-        base_color = rep_colors[row["network"]]
-        groups.setdefault(row["network"], []).append(i)
-
-        ax.bar(
-            i - width / 2,
-            row["improvement_bruteforce_custom"],
-            width,
-            color=mcolors.to_rgba(base_color),
-            edgecolor="black",
-            label=f"Custom Stabilizer Cost" if i == 0 else "",
-        )
-        ax.bar(
-            i + width / 2,
-            row["improvement_bruteforce_default"],
-            width,
-            color=mcolors.to_rgba(base_color),
-            edgecolor="black",
-            alpha=0.4,
-            label=f"Default Combo Cost" if i == 0 else "",
+        grouped_df = (
+            df_m.groupby(["tensor_network", "num_qubits", "cost_fn"])["operations"]
+            .agg(avg_ops="mean", std_ops="std", num_rows="count")
+            .reset_index()
         )
 
-        ax.text(
-            i,
-            y,
-            f"{row['improvement_default_custom']:.2f}x",
-            ha="center",
-            va="bottom",
-            fontsize=10,
-            fontweight="bold",
+        final_df = grouped_df.pivot_table(
+            index=["tensor_network", "num_qubits"], columns="cost_fn", values="avg_ops"
+        ).reset_index()
+
+        final_df = add_brute_force_costs(final_df)
+        print(final_df)
+
+        # Calculated improvement factors
+        final_df["improvement_bruteforce_custom"] = (
+            final_df["brute_force_cost"].astype(float) / final_df["custom_flops"]
         )
+        final_df["improvement_bruteforce_default"] = (
+            final_df["brute_force_cost"].astype(float) / final_df["combo"]
+        )
+        final_df["improvement_default_custom"] = final_df["combo"] / final_df["custom_flops"]
 
-    ax.axhline(1, color="red", linestyle="--", label="No improvement")
-    ax.set_xticks(np.arange(len(final_df)))
-    ax.set_xticklabels(
-        [f"n={nq}" for rep, nq in zip(final_df["network"], final_df["num_qubits"])]
-    )
-    ax.set_ylabel("Default Operations / Cotengra")
-    ax.set_yscale("log")
-    ax.set_title("Improvement Factor for Cotengra vs Brute Force WEP Calculation")
-    ax.legend()
+        print(final_df)
 
-    # Add group labels below x-ticks
-    ymin, _ = ax.get_ylim()
-    for group_name, indices in groups.items():
-        # Position the text at the center of the group
-        x_center = np.mean(indices)
-        ax.text(x_center, ymin * 0.05, group_name, ha="center", va="top", fontsize=10)
+        # Sort by representation based on smallest improvement factor
+        rep_order = (
+            final_df.groupby("tensor_network")["improvement_bruteforce_custom"]
+            .min()
+            .sort_values()
+            .index
+        )
+        final_df["tensor_network"] = pd.Categorical(
+            final_df["tensor_network"], categories=rep_order, ordered=True
+        )
+        final_df = final_df.sort_values(["tensor_network", "num_qubits"], ascending=[True, True])
+        final_df.reset_index(inplace=True)
+
+        # Define colors based on representation
+        reps = final_df["tensor_network"].unique()
+        cmap = cm.get_cmap("tab10", len(reps))
+        rep_colors = {rep: cmap(i) for i, rep in enumerate(reps)}
+
+        #fig, ax = plt.subplots(figsize=(14, 8))
+        width = 0.35  # width of the bars
+        groups = {}
+
+        for i, row in final_df.iterrows():
+            # Determine the height for placing the text above the bars
+            bar_height = max(
+                row["improvement_bruteforce_custom"], row["improvement_bruteforce_default"]
+            )
+            bar_err = max(
+                row["improvement_bruteforce_custom"], row["improvement_bruteforce_default"]
+            )
+            y = bar_height + bar_err + 0.05 * bar_height
+
+            base_color = rep_colors[row["tensor_network"]]
+            groups.setdefault(row["tensor_network"], []).append(i)
+
+            ax.bar(
+                i - width / 2,
+                row["improvement_bruteforce_custom"],
+                width,
+                color=mcolors.to_rgba(base_color),
+                edgecolor="black",
+                label=f"Custom Stabilizer Cost" if i == 0 else "",
+            )
+            ax.bar(
+                i + width / 2,
+                row["improvement_bruteforce_default"],
+                width,
+                color=mcolors.to_rgba(base_color),
+                edgecolor="black",
+                alpha=0.4,
+                label=f"Default Combo Cost" if i == 0 else "",
+            )
+
+            ax.text(
+                i,
+                y,
+                f"{row['improvement_default_custom']:.2f}x",
+                ha="center",
+                va="bottom",
+                fontsize=10,
+                fontweight="bold",
+            )
+
+        ax.axhline(1, color="red", linestyle="--", label="No improvement")
+        ax.set_xticks(np.arange(len(final_df)))
+        ax.set_xticklabels(
+            [f"n={nq}" for rep, nq in zip(final_df["tensor_network"], final_df["num_qubits"])]
+        )
+        ax.set_ylabel("Default Operations / Cotengra")
+        ax.set_yscale("log")
+        ax.set_title("Improvement Factor for Cotengra vs Brute Force WEP Calculation: " + method)
+        ax.legend()
+
+        # Add group labels below x-ticks
+        ymin, _ = ax.get_ylim()
+        for group_name, indices in groups.items():
+            # Position the text at the center of the group
+            x_center = np.mean(indices)
+            ax.text(x_center, ymin * 0.005, group_name, ha="center", va="top", fontsize=10)
 
     plt.subplots_adjust(bottom=0.1)
     plt.tight_layout()
@@ -265,8 +283,45 @@ def plot_operations_scatter_same_plot(
     plt.close()
 
 
-plot_operations_scatter_same_plot(
-    "outputs/results_8_14/tn_architectures_calc_default.csv",
-    "outputs/results_8_14/tn_architectures_calc.csv",
-    "scatter_results_both.png",
+def plot_tensor_sparsity_distribution(data_file_name, out_file="tensor_sparsity_dist.png"):
+    df = pd.read_csv(data_file_name, sep=";")
+
+    # Count frequencies of sparsity values
+    df["tensor_sparsity"] = df["tensor_sparsity"].round(4)
+
+    # Only plot the largest code from each family
+    df = df[
+        df.groupby("network")["num_qubits"].transform("max")
+        == df["num_qubits"]
+    ]
+
+    representations = df["network"].unique()
+
+    fig, axes = plt.subplots(2, 3, figsize=(18, 10), sharey=True)
+    axes = axes.flatten()
+    if len(representations) == 1:
+        axes = [axes]
+
+    for ax, rep in zip(axes, representations):
+        subset = df[df["network"] == rep]
+        nq = int(subset["num_qubits"].iloc[0])
+        counts = subset["tensor_sparsity"].value_counts(normalize=True).sort_index()
+        counts.plot(kind="bar", ax=ax)
+
+        ax.set_title(f"Representation: {rep}, n={nq}")
+        ax.set_xlabel("Sparsity value")
+        ax.set_ylabel("Probability")
+
+    plt.xlabel("Sparsity") 
+    plt.ylabel("Probability") 
+    plt.tight_layout()
+    plt.savefig(out_file)
+    plt.close()
+
+
+plot_improvement_factor_bar_chart(
+    "high_level_greedy_custom_default.csv",
+    "bar_chart_comparison_methods.png",
 )
+
+# plot_tensor_sparsity_distribution("tensor_sparsity_info.csv", "tensor_sparsity_dist.png")
