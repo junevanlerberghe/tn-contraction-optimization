@@ -198,13 +198,13 @@ def make_all_tensor_networks(
                 lambda layer=layer: RepCodeTreeConcatenatedTN(layer)
             )
 
-            if layer < 4:
-                H_concat = RepCodeTreeConcatenatedTN(layer).conjoin_nodes().h
-                tensor_networks[("Concatenated Repetition Tanner", 3**layer)] = (
-                    lambda layer=layer: StabilizerTannerCodeTN(
-                        H_concat
-                    )
-                )
+            # if layer < 4:
+            #     H_concat = RepCodeTreeConcatenatedTN(layer).conjoin_nodes().h
+            #     tensor_networks[("Concatenated Repetition Tanner", 3**layer)] = (
+            #         lambda layer=layer: StabilizerTannerCodeTN(
+            #             H_concat
+            #         )
+            #     )
 
     for d in [3, 5, 7]:
         # Rotated Surface Code - [[d^2,1,d]]
