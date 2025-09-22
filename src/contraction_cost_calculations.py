@@ -3,7 +3,6 @@ import copy
 import csv
 import sys
 import os
-from collections import defaultdict
 import time
 import numpy as np
 from typing import Dict, List, Tuple
@@ -13,15 +12,12 @@ from planqtn.networks.surface_code import SurfaceCodeTN
 
 from planqtn.networks.holographic_happy_code import HolographicHappyTN
 from planqtn.networks.stabilizer_tanner_code import StabilizerTannerCodeTN
-
 from planqtn.contraction_visitors.max_size_cost_visitor import MaxTensorSizeCostVisitor
 
 from planqtn.linalg import gauss
-from compassCodes.compass_code_concatenated import CompassCodeConcatenatedTN, RepCodeTreeConcatenatedTN
+from repetition_tree_code import RepCodeTreeConcatenatedTN
 
 from planqtn.contraction_visitors.sparsity_visitor import SparsityVisitor
-# from planqtn.networks.compass_code import CompassCodeConcatenateAndSparsifyTN
-# from planqtn.networks.holographic_happy_code import HolographicHappyTN
 from planqtn.networks.rotated_surface_code import RotatedSurfaceCodeTN
 from planqtn.networks.stabilizer_measurement_state_prep import (
     StabilizerMeasurementStatePrepTN,
@@ -81,11 +77,6 @@ def find_contraction_cost(
     sparsity_visitor = SparsityVisitor()
     max_size_visitor = MaxTensorSizeCostVisitor()
 
-    # search_params = {
-    #     "greedy_minimizer": "custom_flops",
-    #     "optimal_minimizer": "custom_flops",
-    #     "sub_optimize_minimizer": "custom_flops",
-    # }
     print("Running conjoin nodes with search params: ", search_params)
     start = time.time()
     tn.conjoin_nodes(
