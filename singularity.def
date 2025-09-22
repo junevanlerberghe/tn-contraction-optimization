@@ -28,8 +28,8 @@ From: ubuntu:20.04
     pip3 install --no-cache-dir numpy scipy matplotlib
     pip3 install uv
 
-    # Clone the project repository (if needed)
-    git clone git@gitlab.oit.duke.edu:jlv46/tn-contraction-optimization.git /opt/tn-contraction-optimization
+    mkdir -p /opt/tn-contraction-optimization
+    cp -r ${CI_PROJECT_DIR}/* /opt/tn-contraction-optimization/
 
     # Set up the working directory
     cd /opt/tn-contraction-optimization/planqtn
