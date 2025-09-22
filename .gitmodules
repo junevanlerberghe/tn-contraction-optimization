@@ -1,6 +1,6 @@
 [submodule "planqtn"]
 	path = planqtn
-	url = git@github.com:junevanlerberghe/planqtn.git
+	url = https://github.com/junevanlerberghe/planqtn.git
 [submodule "cotengra"]
 	path = cotengra
-	url = git@github.com:junevanlerberghe/cotengra.git
+	url = https://github.com/junevanlerberghe/cotengra.git
