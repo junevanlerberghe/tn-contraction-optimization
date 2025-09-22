@@ -10,7 +10,7 @@ From: ubuntu:20.04
     Description Singularity container for tensor network contraction optimization.
 
 %files
-    ./tn-contraction-optimization /opt/tn-contraction-optimization
+    . /opt/tn-contraction-optimization
 
 %post
     export DEBIAN_FRONTEND=noninteractive
