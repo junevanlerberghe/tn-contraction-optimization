@@ -198,13 +198,12 @@ def make_all_tensor_networks(
                 lambda layer=layer: RepCodeTreeConcatenatedTN(layer)
             )
 
-            # if layer < 4:
-            #     H_concat = RepCodeTreeConcatenatedTN(layer).conjoin_nodes().h
-            #     tensor_networks[("Concatenated Repetition Tanner", 3**layer)] = (
-            #         lambda layer=layer: StabilizerTannerCodeTN(
-            #             H_concat
-            #         )
-            #     )
+            if layer < 4:
+                tensor_networks[("Concatenated Repetition Tanner", 3**layer)] = (
+                    lambda layer=layer: StabilizerTannerCodeTN(
+                        RepCodeTreeConcatenatedTN(layer).conjoin_nodes().h
+                    )
+                )
 
     for d in [3, 5, 7]:
         # Rotated Surface Code - [[d^2,1,d]]
@@ -256,9 +255,7 @@ def make_all_tensor_networks(
 
             if i == 2:
                 H_happy = HolographicHappyTN(layer).conjoin_nodes().h
-                tensor_networks[("Holographic Tanner", n_qubits[i])] = lambda layer=layers[
-                    i
-                ]: StabilizerTannerCodeTN(H_happy)
+                tensor_networks[("Holographic Tanner", n_qubits[i])] = lambda H_happy=H_happy: StabilizerTannerCodeTN(H_happy)
 
     # BB Code MSP
     if bb:
