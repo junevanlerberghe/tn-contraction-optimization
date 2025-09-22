@@ -26,6 +26,7 @@ From: python:3.13-slim
         && apt-get clean
 
     # Install Python dependencies
+    pip install kahypar
 
     # Set up the working directory
     cd /opt/tn-contraction-optimization/
