@@ -30,8 +30,7 @@ From: ubuntu:20.04
     # Install Python dependencies
 
     # Set up the working directory
-    ls /opt/
-    ls /opt/tn-contraction-optimization
+    ls /opt/tn-contraction-optimization/planqtn
     cd /opt/tn-contraction-optimization/planqtn
     pip3 install .
     cd /opt/tn-contraction-optimization/cotengra
