@@ -28,13 +28,12 @@ From: ubuntu:20.04
         && apt-get clean
 
     # Install Python dependencies
-    pip3 install uv
 
     # Set up the working directory
     cd /opt/tn-contraction-optimization/planqtn
-    uv pip install -e .
+    pip3 install -e .
     cd /opt/tn-contraction-optimization/cotengra
-    uv pip install -e .
+    pip3 install -e .
 
 %environment
     # Set environment variables
