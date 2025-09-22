@@ -30,6 +30,9 @@ From: ubuntu:20.04
     # Install Python dependencies
 
     # Set up the working directory
+    cd /opt/tn-contraction-optimization/
+    git submodule update --init --recursive
+
     ls /opt/tn-contraction-optimization/planqtn
     cd /opt/tn-contraction-optimization/planqtn
     pip3 install .
