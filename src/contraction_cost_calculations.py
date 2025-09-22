@@ -1,3 +1,5 @@
+import argparse
+import copy
 import csv
 import sys
 import os
@@ -5,12 +7,13 @@ from collections import defaultdict
 import time
 import numpy as np
 from typing import Dict, List, Tuple
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "planqtn"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from planqtn.networks.surface_code import SurfaceCodeTN
+
+from planqtn.networks.holographic_happy_code import HolographicHappyTN
 from planqtn.networks.stabilizer_tanner_code import StabilizerTannerCodeTN
 
-# from compassCodes.holographic import HolographicHappyTN
 from planqtn.contraction_visitors.max_size_cost_visitor import MaxTensorSizeCostVisitor
 
 from planqtn.linalg import gauss
@@ -78,12 +81,12 @@ def find_contraction_cost(
     sparsity_visitor = SparsityVisitor()
     max_size_visitor = MaxTensorSizeCostVisitor()
 
-    search_params = {
-        "greedy_minimizer": "custom_flops",
-        "optimal_minimizer": "custom_flops",
-        "sub_optimize_minimizer": "custom_flops",
-    }
-
+    # search_params = {
+    #     "greedy_minimizer": "custom_flops",
+    #     "optimal_minimizer": "custom_flops",
+    #     "sub_optimize_minimizer": "custom_flops",
+    # }
+    print("Running conjoin nodes with search params: ", search_params)
     start = time.time()
     tn.conjoin_nodes(
         verbose=verbose,
@@ -97,6 +100,7 @@ def find_contraction_cost(
         open_legs=open_legs,
         cotengra_opts={"minimize": minimize, "methods": methods},
         progress_reporter=progress_reporter,
+        search_params=search_params,
     )
     end = time.time()
     upper_bound_cost = upper_bound_visitor.total_cost + brute_force_operations
@@ -117,7 +121,8 @@ def run_contraction_cost_experiment(
     num_runs,
     file_name,
     minimize="custom",
-    methods=["greedy"]
+    methods=["greedy"],
+    search_params={},
 ):
     """Run contraction cost experiments for the given tensor networks and save results to a CSV file.
 
@@ -166,6 +171,7 @@ def run_contraction_cost_experiment(
                 verbose=False,
                 progress_reporter=TqdmProgressReporter(),
                 cotengra=True,
+                search_params=copy.deepcopy(search_params)
             )
         
             sparsities = [s[-1] for s in tensor_sparsities]
@@ -178,7 +184,7 @@ def run_contraction_cost_experiment(
                         methods,
                         name,
                         num_qubits,
-                        i + 100,
+                        i,
                         upper_bound_cost,
                         custom_cost,
                         cost_with_bruteforce,
@@ -201,11 +207,24 @@ def make_all_tensor_networks(
                 lambda layer=layer: RepCodeTreeConcatenatedTN(layer)
             )
 
+            if layer < 4:
+                H_concat = RepCodeTreeConcatenatedTN(layer).conjoin_nodes().h
+                tensor_networks[("Concatenated Repetition Tanner", 3**layer)] = (
+                    lambda layer=layer: StabilizerTannerCodeTN(
+                        H_concat
+                    )
+                )
+
     for d in [3, 5, 7]:
         # Rotated Surface Code - [[d^2,1,d]]
         if rotated_surface:
             tensor_networks[("Rotated Surface", d**2)] = (
                 lambda d=d: RotatedSurfaceCodeTN(d)
+            )
+
+            # Kitaev Surface Code - [[d^2 + (d-1)^2, 1, d]]
+            tensor_networks[("Surface Code", d**2 + (d - 1)**2)] = (
+                lambda d=d: SurfaceCodeTN(d)
             )
 
     # MSP for Rotated Surface Code -- [[d^2,1,d]]
@@ -216,7 +235,6 @@ def make_all_tensor_networks(
                 lambda H_surface=H_surface: StabilizerMeasurementStatePrepTN(H_surface)
             )
 
-            H_surface = RotatedSurfaceCodeTN(d).conjoin_nodes().h
             tensor_networks[("Rotated Surface Tanner", d**2)] = (
                 lambda H_surface=H_surface: StabilizerTannerCodeTN(H_surface)
             )
@@ -245,6 +263,12 @@ def make_all_tensor_networks(
                 i
             ]: HolographicHappyTN(layer)
 
+            if i == 2:
+                H_happy = HolographicHappyTN(layer).conjoin_nodes().h
+                tensor_networks[("Holographic Tanner", n_qubits[i])] = lambda layer=layers[
+                    i
+                ]: StabilizerTannerCodeTN(H_happy)
+
     # BB Code MSP
     if bb:
         bb_codes = [18, 30]
@@ -257,12 +281,17 @@ def make_all_tensor_networks(
                 lambda H_bb=H_bb: StabilizerMeasurementStatePrepTN(H_bb)
             )
 
+            tensor_networks[("BB Tanner", bb_codes[i])] = (
+                lambda H_bb=H_bb: StabilizerTannerCodeTN(H_bb)
+            )
+
     return tensor_networks
 
 
 def run_all_contraction_cost_experiments(
     num_runs=100,
     file_name="contraction_costs.csv",
+    methods=["greedy", "kahypar"],
     concatenated=True,
     rotated_surface=True,
     hamming=True,
@@ -277,33 +306,27 @@ def run_all_contraction_cost_experiments(
         tn (bool): Whether to include the given tensor network in the experiments.
     """
 
-    tensor_networks = make_all_tensor_networks(
-        concatenated, rotated_surface, hamming, holo, bb
-    )
-    run_contraction_cost_experiment(
-        tensor_networks, num_runs, file_name, minimize="custom_flops", methods=["kahypar"]
-    )
+    for method in methods:
+        search_params = {}
+        if method == "kahypar":
+            search_params = {
+                "greedy_minimizer": "custom_flops",
+                "optimal_minimizer": "custom_flops",
+                "sub_optimize_minimizer": "custom_flops",
+            }
+        tensor_networks = make_all_tensor_networks(
+            concatenated, rotated_surface, hamming, holo, bb
+        )
+        run_contraction_cost_experiment(
+            tensor_networks, num_runs, file_name, minimize="custom_flops", methods=[method], search_params=search_params
+        )
 
-    tensor_networks = make_all_tensor_networks(
-        concatenated, rotated_surface, hamming, holo, bb
-    )
-    run_contraction_cost_experiment(
-        tensor_networks, num_runs, file_name, minimize="custom_flops", methods=["greedy"]
-    )
-
-    tensor_networks = make_all_tensor_networks(
-        concatenated, rotated_surface, hamming, holo, bb
-    )
-    run_contraction_cost_experiment(
-        tensor_networks, num_runs, file_name, minimize="combo", methods=["greedy"]
-    ) 
-
-    tensor_networks = make_all_tensor_networks(
-        concatenated, rotated_surface, hamming, holo, bb
-    )
-    run_contraction_cost_experiment(
-        tensor_networks, num_runs, file_name, minimize="combo", methods=["kahypar"]
-    )
+        tensor_networks = make_all_tensor_networks(
+            concatenated, rotated_surface, hamming, holo, bb
+        )
+        run_contraction_cost_experiment(
+            tensor_networks, num_runs, file_name, minimize="combo", methods=[method]
+        )
 
 
 def find_sparsity_information(
@@ -339,11 +362,35 @@ def find_sparsity_information(
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run contraction cost experiments.")
+    parser.add_argument(
+        "--file_name",
+        type=str,
+        default="contraction_costs.csv",
+        help="Name of the CSV file to save results.",
+    )
+    parser.add_argument(
+        "--num_runs",
+        type=int,
+        default=10,
+        help="Number of runs for each tensor network.",
+    )
+    parser.add_argument(
+        "--methods",
+        type=str,
+        nargs="+",
+        default=["greedy", "kahypar"],
+        help="List of methods to use for contraction (e.g., greedy, kahypar).",
+    )
+    args = parser.parse_args()
+    
     run_all_contraction_cost_experiments(
-        num_runs=10,
-        concatenated=False,
+        num_runs=args.num_runs,
+        file_name=args.file_name,
+        methods=args.methods,
+        concatenated=True,
         rotated_surface=True,
-        hamming=False,
-        holo=False,
-        bb=False,
+        hamming=True,
+        holo=True,
+        bb=True,
     )

@@ -1,0 +1,16 @@
+#!/bin/bash
+
+COMMIT_HASH=$(git rev-parse HEAD)
+
+if [[ -n $(git status -s) ]]; then
+    TAG="${COMMIT_HASH}-dirty"
+else
+    # First try to get the tag for the current commit
+    TAG=$(git describe --exact-match --tags HEAD 2>/dev/null)
+    # If no tag exists, fall back to commit hash
+    if [ -z "$TAG" ]; then        
+        TAG=$COMMIT_HASH
+    fi
+fi
+
+echo $TAG
