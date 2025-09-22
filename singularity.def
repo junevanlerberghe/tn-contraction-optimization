@@ -10,7 +10,7 @@ From: ubuntu:20.04
     Description Singularity container for tensor network contraction optimization.
 
 %post
-    ENV DEBIAN_FRONTEND=noninteractive
+    export DEBIAN_FRONTEND=noninteractive
 
     # Update and install necessary packages
     apt-get update && apt-get install -y \
