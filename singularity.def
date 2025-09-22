@@ -29,7 +29,7 @@ From: ubuntu:20.04
     pip3 install uv
 
     # Clone the project repository (if needed)
-    git clone https://github.com/junevanlerberghe/tn-contraction-optimization.git /opt/tn-contraction-optimization
+    git clone git@gitlab.oit.duke.edu:jlv46/tn-contraction-optimization.git /opt/tn-contraction-optimization
 
     # Set up the working directory
     cd /opt/tn-contraction-optimization/planqtn
