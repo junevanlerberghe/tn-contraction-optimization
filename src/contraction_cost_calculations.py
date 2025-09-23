@@ -221,9 +221,9 @@ def make_all_tensor_networks(
     for d in [3, 5]:
         if rotated_surface:
             H_surface = RotatedSurfaceCodeTN(d).conjoin_nodes().h
-            tensor_networks[("Rotated Surface MSP", d**2)] = (
-                lambda H_surface=H_surface: StabilizerMeasurementStatePrepTN(H_surface)
-            )
+            # tensor_networks[("Rotated Surface MSP", d**2)] = (
+            #     lambda H_surface=H_surface: StabilizerMeasurementStatePrepTN(H_surface)
+            # )
 
             tensor_networks[("Rotated Surface Tanner", d**2)] = (
                 lambda H_surface=H_surface: StabilizerTannerCodeTN(H_surface)
@@ -232,11 +232,11 @@ def make_all_tensor_networks(
     # MSP for Hamming Code (non-degenerate) -- [[7,1,3]], [[15,7,3]], [[31,21,3]]
     if hamming:
         for r in [3, 4]:
-            tensor_networks[("Hamming MSP", 2**r - 1)] = (
-                lambda r=r: StabilizerMeasurementStatePrepTN(
-                    generate_hamming_parity_check(r)
-                )
-            )
+            # tensor_networks[("Hamming MSP", 2**r - 1)] = (
+            #     lambda r=r: StabilizerMeasurementStatePrepTN(
+            #         generate_hamming_parity_check(r)
+            #     )
+            # )
 
             tensor_networks[("Hamming Tanner", 2**r - 1)] = (
                 lambda r=r: StabilizerTannerCodeTN(
@@ -253,9 +253,9 @@ def make_all_tensor_networks(
                 i
             ]: HolographicHappyTN(layer)
 
-            if i == 2:
-                H_happy = HolographicHappyTN(layer).conjoin_nodes().h
-                tensor_networks[("Holographic Tanner", n_qubits[i])] = lambda H_happy=H_happy: StabilizerTannerCodeTN(H_happy)
+            # if i == 2:
+            #     H_happy = HolographicHappyTN(layer).conjoin_nodes().h
+            #     tensor_networks[("Holographic Tanner", n_qubits[i])] = lambda H_happy=H_happy: StabilizerTannerCodeTN(H_happy)
 
     # BB Code MSP
     if bb:
@@ -265,9 +265,9 @@ def make_all_tensor_networks(
             l, m, a, b = get_bb_params(bb_codes[i])
             H_bb = create_full_parity_check(l, m, a, b)
 
-            tensor_networks[("BB MSP", bb_codes[i])] = (
-                lambda H_bb=H_bb: StabilizerMeasurementStatePrepTN(H_bb)
-            )
+            # tensor_networks[("BB MSP", bb_codes[i])] = (
+            #     lambda H_bb=H_bb: StabilizerMeasurementStatePrepTN(H_bb)
+            # )
 
             tensor_networks[("BB Tanner", bb_codes[i])] = (
                 lambda H_bb=H_bb: StabilizerTannerCodeTN(H_bb)
