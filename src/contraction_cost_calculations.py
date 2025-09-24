@@ -131,6 +131,13 @@ def run_contraction_cost_experiment(
         num_runs (int): Number of runs for each tensor network.
         file_name (str): Name of the CSV file to save results.
     """
+    print("path exists? ", os.path.exists("/hpc/group/brownlab/jlv46/cotengra-data"))
+    print("can access dir? ", os.access("/hpc/group/brownlab/jlv46/cotengra-data", os.W_OK))
+    print("file name is: ", file_name)
+
+    directory = os.path.dirname(file_name)
+    print("directory is: ", directory)
+
     if not os.path.exists(file_name):
         with open(file_name, "w") as f:
             writer = csv.writer(f, delimiter=";")
