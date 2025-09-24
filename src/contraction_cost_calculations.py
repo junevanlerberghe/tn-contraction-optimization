@@ -45,6 +45,8 @@ def find_contraction_cost(
     verbose: bool = False,
     progress_reporter: ProgressReporter = DummyProgressReporter(),
     cotengra: bool = True,
+    max_repeats: int = 128,
+    max_time: int = None
 ):
     """Finds the contraction cost of a tensor network using cotengra to find a contraction schedule.
     Calculates both the upper bound cost from the open legs and the number of operations it will take to
@@ -89,7 +91,12 @@ def find_contraction_cost(
         ],
         cotengra=cotengra,
         open_legs=open_legs,
-        cotengra_opts={"minimize": minimize, "methods": methods},
+        cotengra_opts = {
+            "minimize": minimize, 
+            "methods": methods, 
+            "max_time": max_time, 
+            "max_repeats": max_repeats
+        },
         progress_reporter=progress_reporter,
         search_params=search_params,
     )
@@ -114,6 +121,8 @@ def run_contraction_cost_experiment(
     minimize="custom",
     methods=["greedy"],
     search_params={},
+    max_repeats=128,
+    max_time=None
 ):
     """Run contraction cost experiments for the given tensor networks and save results to a CSV file.
 
@@ -162,7 +171,9 @@ def run_contraction_cost_experiment(
                 verbose=False,
                 progress_reporter=TqdmProgressReporter(),
                 cotengra=True,
-                search_params=copy.deepcopy(search_params)
+                search_params=copy.deepcopy(search_params),
+                max_repeats=max_repeats,
+                max_time=max_time
             )
         
             sparsities = [s[-1] for s in tensor_sparsities]
@@ -187,57 +198,48 @@ def run_contraction_cost_experiment(
 
 
 def make_all_tensor_networks(
-    concatenated=True, rotated_surface=True, hamming=True, holo=True, bb=True
+    codes
 ):
     tensor_networks = {}
 
     for layer in [2, 3, 4]:
         # Symmetric Tree Tensor Network (Concatenated Repetition):
-        if concatenated:
+        if "concatenated" in codes:
             tensor_networks[("Concatenated Repetition", 3**layer)] = (
                 lambda layer=layer: RepCodeTreeConcatenatedTN(layer)
             )
 
-            if layer < 4:
-                tensor_networks[("Concatenated Repetition Tanner", 3**layer)] = (
-                    lambda layer=layer: StabilizerTannerCodeTN(
-                        RepCodeTreeConcatenatedTN(layer).conjoin_nodes().h
-                    )
-                )
-
     for d in [3, 5, 7]:
         # Rotated Surface Code - [[d^2,1,d]]
-        if rotated_surface:
+        if "rotated" in codes:
             tensor_networks[("Rotated Surface", d**2)] = (
                 lambda d=d: RotatedSurfaceCodeTN(d)
             )
 
-            # Kitaev Surface Code - [[d^2 + (d-1)^2, 1, d]]
-            tensor_networks[("Surface Code", d**2 + (d - 1)**2)] = (
-                lambda d=d: SurfaceCodeTN(d)
-            )
-
     # MSP for Rotated Surface Code -- [[d^2,1,d]]
     for d in [3, 5]:
-        if rotated_surface:
-            H_surface = RotatedSurfaceCodeTN(d).conjoin_nodes().h
-            # tensor_networks[("Rotated Surface MSP", d**2)] = (
-            #     lambda H_surface=H_surface: StabilizerMeasurementStatePrepTN(H_surface)
-            # )
+        H_surface = RotatedSurfaceCodeTN(d).conjoin_nodes().h
 
+        if "rotated_msp" in codes:
+            tensor_networks[("Rotated Surface MSP", d**2)] = (
+                lambda H_surface=H_surface: StabilizerMeasurementStatePrepTN(H_surface)
+            )
+
+        if "rotated_tanner" in codes:
             tensor_networks[("Rotated Surface Tanner", d**2)] = (
                 lambda H_surface=H_surface: StabilizerTannerCodeTN(H_surface)
             )
 
     # MSP for Hamming Code (non-degenerate) -- [[7,1,3]], [[15,7,3]], [[31,21,3]]
-    if hamming:
-        for r in [3, 4]:
-            # tensor_networks[("Hamming MSP", 2**r - 1)] = (
-            #     lambda r=r: StabilizerMeasurementStatePrepTN(
-            #         generate_hamming_parity_check(r)
-            #     )
-            # )
+    for r in [3, 4]:
+        if "hamming_msp" in codes:
+            tensor_networks[("Hamming MSP", 2**r - 1)] = (
+                lambda r=r: StabilizerMeasurementStatePrepTN(
+                    generate_hamming_parity_check(r)
+                )
+            )
 
+        if "hamming_tanner" in codes:
             tensor_networks[("Hamming Tanner", 2**r - 1)] = (
                 lambda r=r: StabilizerTannerCodeTN(
                     generate_hamming_parity_check(r)
@@ -245,7 +247,7 @@ def make_all_tensor_networks(
             )
 
     # Holographic Happy TN - [[25,11,3]], [[95,51,3]]
-    if holo:
+    if "holo" in codes:
         layers = [2, 3]
         n_qubits = [25, 95, 355]
         for i in range(len(layers)):
@@ -253,22 +255,19 @@ def make_all_tensor_networks(
                 i
             ]: HolographicHappyTN(layer)
 
-            # if i == 2:
-            #     H_happy = HolographicHappyTN(layer).conjoin_nodes().h
-            #     tensor_networks[("Holographic Tanner", n_qubits[i])] = lambda H_happy=H_happy: StabilizerTannerCodeTN(H_happy)
-
     # BB Code MSP
-    if bb:
-        bb_codes = [18, 30]
+    bb_codes = [18, 30]
 
-        for i in range(len(bb_codes)):
-            l, m, a, b = get_bb_params(bb_codes[i])
-            H_bb = create_full_parity_check(l, m, a, b)
+    for i in range(len(bb_codes)):
+        l, m, a, b = get_bb_params(bb_codes[i])
+        H_bb = create_full_parity_check(l, m, a, b)
 
-            # tensor_networks[("BB MSP", bb_codes[i])] = (
-            #     lambda H_bb=H_bb: StabilizerMeasurementStatePrepTN(H_bb)
-            # )
+        if "bb_msp" in codes:
+            tensor_networks[("BB MSP", bb_codes[i])] = (
+                lambda H_bb=H_bb: StabilizerMeasurementStatePrepTN(H_bb)
+            )
 
+        if "bb_tanner" in codes:
             tensor_networks[("BB Tanner", bb_codes[i])] = (
                 lambda H_bb=H_bb: StabilizerTannerCodeTN(H_bb)
             )
@@ -280,11 +279,9 @@ def run_all_contraction_cost_experiments(
     num_runs=100,
     file_name="contraction_costs.csv",
     methods=["greedy", "kahypar"],
-    concatenated=True,
-    rotated_surface=True,
-    hamming=True,
-    holo=True,
-    bb=True,
+    codes=["concatenated", "rotated", "rotated_msp", "rotated_tanner", "hamming_msp", "hamming_tanner", "holo", "bb_msp", "bb_tanner"],
+    max_repeats=128,
+    max_time=None
 ):
     """Create tensor networks and run contraction cost experiments for combo and custom minimize functions.
 
@@ -303,17 +300,17 @@ def run_all_contraction_cost_experiments(
                 "sub_optimize_minimizer": "custom_flops",
             }
         tensor_networks = make_all_tensor_networks(
-            concatenated, rotated_surface, hamming, holo, bb
+            codes
         )
         run_contraction_cost_experiment(
-            tensor_networks, num_runs, file_name, minimize="custom_flops", methods=[method], search_params=search_params
+            tensor_networks, num_runs, file_name, minimize="custom_flops", methods=[method], search_params=search_params, max_repeats=max_repeats, max_time=max_time
         )
 
         tensor_networks = make_all_tensor_networks(
-            concatenated, rotated_surface, hamming, holo, bb
+            codes
         )
         run_contraction_cost_experiment(
-            tensor_networks, num_runs, file_name, minimize="combo", methods=[method]
+            tensor_networks, num_runs, file_name, minimize="flops", methods=[method], max_repeats=max_repeats, max_time=max_time
         )
 
 
@@ -370,15 +367,32 @@ if __name__ == "__main__":
         default=["greedy", "kahypar"],
         help="List of methods to use for contraction (e.g., greedy, kahypar).",
     )
+    parser.add_argument(
+        "--codes", 
+        nargs="+", 
+        default=["concatenated", "rotated", "rotated_msp", "rotated_tanner", "hamming_msp", "hamming_tanner", "holo", "bb_msp", "bb_tanner"],
+        help="List of methods to run (concatenated, rotated_surface, hamming, holo, bb)"
+    )
+    parser.add_argument(
+        "--max_time",
+        type=int,
+        default=None,
+        help="Maximum time (in seconds) to allow Cotengra to run for each code.",
+    )
+    parser.add_argument(
+        "--max_repeats",
+        type=int,
+        default=128,
+        help="Maximum number of trials to allow Cotengra to run for each code.",
+    )
+
     args = parser.parse_args()
     
     run_all_contraction_cost_experiments(
         num_runs=args.num_runs,
         file_name=args.file_name,
         methods=args.methods,
-        concatenated=True,
-        rotated_surface=True,
-        hamming=True,
-        holo=True,
-        bb=True,
+        codes=args.codes,
+        max_repeats=args.max_repeats,
+        max_time=args.max_time
     )
