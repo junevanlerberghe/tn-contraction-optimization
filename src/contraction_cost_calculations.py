@@ -302,9 +302,9 @@ def run_all_contraction_cost_experiments(
         search_params = {}
         if method == "kahypar":
             search_params = {
-                "greedy_minimizer": "flops",
-                "optimal_minimizer": "flops",
-                # "sub_optimize_minimizer": "flops",
+                "greedy_minimizer": "custom_flops",
+                "optimal_minimizer": "custom_flops",
+                "sub_optimize_minimizer": "custom_flops",
             }
         tensor_networks = make_all_tensor_networks(
             codes
