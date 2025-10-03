@@ -234,7 +234,7 @@ def make_all_tensor_networks(representations=["concat_sparsify", "qubit_wise", "
                     if np.random.rand() < p_flip:
                         coloring[i][j] = 2
 
-            tn_compass, _, _ = CompassCodeDualSurfaceCodeLayoutTN(coloring).conjoin_nodes()
+            tn_compass = CompassCodeDualSurfaceCodeLayoutTN(coloring).conjoin_nodes()
             H_compass = tn_compass.h 
 
             if("msp" in representations):
