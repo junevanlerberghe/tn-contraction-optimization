@@ -46,7 +46,7 @@ From: python:3.13-slim
 
 %runscript
     # Define the default command to run
-    exec python3 /opt/tn-contraction-optimization/src/contraction_cost_calculations.py "$@"
+    exec python3 /opt/tn-contraction-optimization/compass-code-complexity/compass-code-complexity.py "$@"
 
 %test
     # Test if the container is set up correctly
