@@ -199,7 +199,7 @@ def generate_checkerboard_coloring(d):
 def make_all_tensor_networks(representations=["concat_sparsify", "qubit_wise", "dual_surface", "msp", "tanner"]):
     tensor_networks = {}
 
-    for d in [3, 5, 7, 9, 11]:
+    for d in [13, 15]:
         for p_flip in [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]:
             # if random number is less than q_shor, then put an X stabilizer in that plaquette
             # start with distance d checkerboard coloring, then change to Xs whenver necessary
@@ -224,7 +224,7 @@ def make_all_tensor_networks(representations=["concat_sparsify", "qubit_wise", "
                     lambda coloring=coloring: CompassCodeDualSurfaceCodeLayoutTN(coloring)
                 )
 
-    for d in [3, 5, 7]:
+    for d in [9, 11]:
         for p_flip in [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]:
             # if random number is less than q_shor, then put an X stabilizer in that plaquette
             # start with distance d checkerboard coloring, then change to Xs whenver necessary
