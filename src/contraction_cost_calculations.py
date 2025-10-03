@@ -217,8 +217,9 @@ def make_all_tensor_networks(codes=["concatenated", "rotated", "rotated_msp", "r
 
     # MSP for Rotated Surface Code -- [[d^2,1,d]]
     for d in [3, 5]:
-        H_surface = RotatedSurfaceCodeTN(d).conjoin_nodes().h
+        tn = RotatedSurfaceCodeTN(d).conjoin_nodes()
 
+        H_surface = tn.h
         if "rotated_msp" in codes:
             tensor_networks[("Rotated Surface MSP", d**2)] = (
                 lambda H_surface=H_surface: StabilizerMeasurementStatePrepTN(H_surface)
@@ -280,7 +281,7 @@ def run_all_contraction_cost_experiments(
     methods=["greedy", "kahypar"],
     codes=["concatenated", "rotated", "rotated_msp", "rotated_tanner", "hamming_msp", "hamming_tanner", "holo", "bb_msp", "bb_tanner"],
     max_repeats=128,
-    max_time=None
+    max_time=None,
 ):
     """Create tensor networks and run contraction cost experiments for combo and custom minimize functions.
 
@@ -298,12 +299,12 @@ def run_all_contraction_cost_experiments(
                 "optimal_minimizer": "custom_flops",
                 "sub_optimize_minimizer": "custom_flops",
             }
-        tensor_networks = make_all_tensor_networks(
-            codes
-        )
-        run_contraction_cost_experiment(
-            tensor_networks, num_runs, file_name, minimize="custom_flops", methods=[method], search_params=search_params, max_repeats=max_repeats, max_time=max_time
-        )
+        # tensor_networks = make_all_tensor_networks(
+        #     codes
+        # )
+        # run_contraction_cost_experiment(
+        #     tensor_networks, num_runs, file_name, minimize="custom_flops", methods=[method], search_params=search_params, max_repeats=max_repeats, max_time=max_time
+        # )
 
         tensor_networks = make_all_tensor_networks(
             codes
@@ -389,7 +390,6 @@ if __name__ == "__main__":
         action='store_true',
         help="Collect tensor sparsity data instead of contraction cost"
     )
-
     args = parser.parse_args()
     
     if(args.sparsity_collection):
