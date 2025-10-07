@@ -8,7 +8,6 @@ import numpy as np
 from typing import Dict, List, Tuple
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "planqtn"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from planqtn.networks.surface_code import SurfaceCodeTN
 
 from planqtn.networks.holographic_happy_code import HolographicHappyTN
 from planqtn.networks.stabilizer_tanner_code import StabilizerTannerCodeTN
@@ -33,7 +32,6 @@ from bb_parity_check import create_full_parity_check, get_bb_params
 from utils import generate_hamming_parity_check
 from planqtn.progress_reporter import TqdmProgressReporter
 from planqtn.progress_reporter import DummyProgressReporter, ProgressReporter
-from planqtn.stabilizer_tensor_enumerator import _index_leg
 
 
 def find_contraction_cost(
@@ -48,20 +46,23 @@ def find_contraction_cost(
     max_repeats: int = 128,
     max_time: int = None
 ):
-    """Finds the contraction cost of a tensor network using cotengra to find a contraction schedule.
-    Calculates both the upper bound cost from the open legs and the number of operations it will take to
-    contract the network.
+    """Finds the contraction cost of a tensor network using Cotengra to find a contraction schedule.
+    Uses ContractionVisitors to collect various information about the contraction, such as cost.
 
     Args:
-        tn (TensorNetwork): The tensor network to analyze.
-        minimize (str): The cost function to minimize when finding the contraction schedule. Options are "flops", "size", "custom".
+        tn (TensorNetwork): The tensor network to find contraction schedule for.
+        minimize (str): The cost function to minimize when finding the contraction schedule.
+        methods (List[str]): List of methods to use for contraction (e.g., greedy, kahypar).
+        search_params (Dict): Additional search parameters for cotengra.
         open_legs (List[Tuple[int, int]]): List of open legs to consider in the cost calculation. Each leg is a tuple of (node_index, leg_index).
         verbose (bool): Whether to print detailed information during the process.
         progress_reporter (ProgressReporter): An instance of ProgressReporter to report progress.
-        cotengra (bool): Whether to use cotengra to find the contraction schedule. If False, uses a default greedy algorithm.
+        cotengra (bool): Whether to use cotengra to find the contraction schedule. 
+        max_repeats (int): Maximum number of trials to allow Cotengra to run for each code.
+        max_time (int): Maximum time (in seconds) to allow Cotengra to run for each code.
 
     Returns:
-        Tuple[int, int]: A tuple containing the upper bound cost and the contraction cost.
+        Tuple[int, int, int, int, List[float], float]: A tuple containing the information from the ContractionVisitors
     """
     assert (
         progress_reporter is not None
@@ -79,7 +80,6 @@ def find_contraction_cost(
     sparsity_visitor = SparsityVisitor()
     max_size_visitor = MaxTensorSizeCostVisitor()
 
-    print("Running conjoin nodes with search params: ", search_params)
     start = time.time()
     tn.conjoin_nodes(
         verbose=verbose,
@@ -130,6 +130,11 @@ def run_contraction_cost_experiment(
         networks (Dict[Tuple[str, int], TensorNetwork]): A dictionary mapping (name, num_qubits) to tensor networks.
         num_runs (int): Number of runs for each tensor network.
         file_name (str): Name of the CSV file to save results.
+        minimize (str): The cost function to minimize when finding the contraction schedule.
+        methods (List[str]): List of methods to use for contraction (e.g., greedy, kahypar).
+        search_params (Dict): Additional search parameters for cotengra.
+        max_repeats (int): Maximum number of trials to allow Cotengra to run for each code.
+        max_time (int): Maximum time (in seconds) to allow Cotengra to run for each code.
     """
 
     if not os.path.exists(file_name):
@@ -199,6 +204,13 @@ def run_contraction_cost_experiment(
 
 
 def make_all_tensor_networks(codes=["concatenated", "rotated", "rotated_msp", "rotated_tanner", "hamming_msp", "hamming_tanner", "holo", "bb_msp", "bb_tanner"]):
+    """ Makes a dictionary of all tensor networks to be used in the experiments.
+
+    Args:
+        codes: List of codes to create. Default is all codes.
+    Returns:
+        Dictionary mapping (name, num_qubits) to tensor network creation functions.
+    """
     tensor_networks = {}
 
     for layer in [2, 3, 4]:
@@ -283,12 +295,15 @@ def run_all_contraction_cost_experiments(
     max_repeats=128,
     max_time=None,
 ):
-    """Create tensor networks and run contraction cost experiments for combo and custom minimize functions.
+    """Create tensor networks and run contraction cost experiments for flops and custom SST minimize functions.
 
     Args:
-        num_runs (int): Number of runs for each tensor network.
-        file_name (str): Name of the CSV file to save results.
-        tn (bool): Whether to include the given tensor network in the experiments.
+        num_runs: Number of runs for each tensor network.
+        file_name: Name of the CSV file to save results.
+        methods: List of methods to use for contraction (e.g., greedy, kahypar).
+        codes: List of codes to include in the experiment. Default is all codes.
+        max_repeats: Maximum number of trials to allow Cotengra to run for each code.
+        max_time: Maximum time (in seconds) to allow Cotengra to run for each code.
     """
 
     for method in methods:
@@ -299,13 +314,16 @@ def run_all_contraction_cost_experiments(
                 "optimal_minimizer": "custom_flops",
                 "sub_optimize_minimizer": "custom_flops",
             }
-        # tensor_networks = make_all_tensor_networks(
-        #     codes
-        # )
-        # run_contraction_cost_experiment(
-        #     tensor_networks, num_runs, file_name, minimize="custom_flops", methods=[method], search_params=search_params, max_repeats=max_repeats, max_time=max_time
-        # )
 
+        # Run SST cost function. If Kahypar, also use flops for the internal greedy and optimal minimizers.
+        tensor_networks = make_all_tensor_networks(
+            codes
+        )
+        run_contraction_cost_experiment(
+            tensor_networks, num_runs, file_name, minimize="custom_flops", methods=[method], search_params=search_params, max_repeats=max_repeats, max_time=max_time
+        )
+
+        # Run default flops (dense) cost function with no customizations.
         tensor_networks = make_all_tensor_networks(
             codes
         )

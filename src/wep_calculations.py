@@ -8,16 +8,14 @@ import numpy as np
 from typing import Dict, List, Tuple
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "planqtn"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from planqtn.networks.surface_code import SurfaceCodeTN
 
+from bb_parity_check import create_full_parity_check, get_bb_params
 from planqtn.networks.holographic_happy_code import HolographicHappyTN
 from planqtn.networks.stabilizer_tanner_code import StabilizerTannerCodeTN
-from planqtn.contraction_visitors.max_size_cost_visitor import MaxTensorSizeCostVisitor
 
 from planqtn.linalg import gauss
 from repetition_tree_code import RepCodeTreeConcatenatedTN
 
-from planqtn.contraction_visitors.sparsity_visitor import SparsityVisitor
 from planqtn.networks.rotated_surface_code import RotatedSurfaceCodeTN
 from planqtn.networks.stabilizer_measurement_state_prep import (
     StabilizerMeasurementStatePrepTN,
@@ -27,13 +25,11 @@ from planqtn.tensor_network import Contraction, TensorNetwork
 from planqtn.contraction_visitors.stabilizer_flops_cost_fn import (
     StabilizerCodeFlopsCostVisitor,
 )
-from planqtn.contraction_visitors.upper_bound_cost_visitor import UpperBoundCostVisitor
 
-from bb_parity_check import create_full_parity_check, get_bb_params
 from utils import generate_hamming_parity_check
 from planqtn.progress_reporter import TqdmProgressReporter
 from planqtn.progress_reporter import DummyProgressReporter, ProgressReporter
-from planqtn.stabilizer_tensor_enumerator import StabilizerCodeTensorEnumerator, _index_leg
+from planqtn.stabilizer_tensor_enumerator import StabilizerCodeTensorEnumerator
 
 
 def find_wep(
@@ -123,14 +119,14 @@ def make_all_tensor_networks(
 ):
     tensor_networks = {}
 
-    for layer in [2, 3, 4]:
+    for layer in [2, 3, 4, 5]:
         # Symmetric Tree Tensor Network (Concatenated Repetition):
         if "concatenated" in codes:
             tensor_networks[("Concatenated Repetition", 3**layer)] = (
                 lambda layer=layer: RepCodeTreeConcatenatedTN(layer)
             )
 
-    for d in [3, 5, 7]:
+    for d in [3, 5, 7, 9]:
         # Rotated Surface Code - [[d^2,1,d]]
         if "rotated" in codes:
             tensor_networks[("Rotated Surface", d**2)] = (
@@ -138,7 +134,7 @@ def make_all_tensor_networks(
             )
 
     # MSP for Rotated Surface Code -- [[d^2,1,d]]
-    for d in [3]:
+    for d in [3, 5]:
         tn , _, _ = RotatedSurfaceCodeTN(d).conjoin_nodes()
 
         H_surface = tn.h
@@ -153,7 +149,7 @@ def make_all_tensor_networks(
             )
 
     # MSP for Hamming Code (non-degenerate) -- [[7,1,3]], [[15,7,3]], [[31,21,3]]
-    for r in [4]:
+    for r in [3]:
         if "hamming_msp" in codes:
             tensor_networks[("Hamming MSP", 2**r - 1)] = (
                 lambda r=r: StabilizerMeasurementStatePrepTN(
@@ -170,12 +166,29 @@ def make_all_tensor_networks(
 
     # Holographic Happy TN - [[25,11,3]], [[95,51,3]]
     if "holo" in codes:
-        layers = [3]
-        n_qubits = [95]
+        layers = [2, 3]
+        n_qubits = [25, 95]
         for i in range(len(layers)):
             tensor_networks[("Holographic", n_qubits[i])] = lambda layer=layers[
                 i
             ]: HolographicHappyTN(layer)
+
+    #  # BB Code MSP
+    bb_codes = [18]
+
+    for i in range(len(bb_codes)):
+        l, m, a, b = get_bb_params(bb_codes[i])
+        H_bb = create_full_parity_check(l, m, a, b)
+
+        if "bb_msp" in codes:
+            tensor_networks[("BB MSP", bb_codes[i])] = (
+                lambda H_bb=H_bb: StabilizerMeasurementStatePrepTN(H_bb)
+            )
+
+        if "bb_tanner" in codes:
+            tensor_networks[("BB Tanner", bb_codes[i])] = (
+                lambda H_bb=H_bb: StabilizerTannerCodeTN(H_bb)
+            )
 
     return tensor_networks
 

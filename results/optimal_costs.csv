@@ -1,0 +1,5 @@
+cost_fn;methods;tensor_network;num_qubits;num_run;upper_bound_cost;operations;operations_with_bruteforce;max_tensor_size;avg_tensor_sparsity;time
+custom_flops;['kahypar'];Concatenated Repetition;9;0;108;10.0;62.0;4;0.58333;0.14161992073059082
+custom_flops;['kahypar'];Concatenated Repetition;27;0;588;116.0;312.0;16;0.57292;28.38908815383911
+custom_flops;['kahypar'];Rotated Surface;9;0;6656;68.0;132.0;8;0.19531;15.431788921356201
+custom_flops;['kahypar'];Holographic;25;0;10480;2320.0;2496.0;256;0.82656;89.85295414924622
