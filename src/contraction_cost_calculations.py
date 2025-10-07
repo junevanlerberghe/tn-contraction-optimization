@@ -138,7 +138,6 @@ def run_contraction_cost_experiment(
         max_repeats (int): Maximum number of trials to allow Cotengra to run for each code.
         max_time (int): Maximum time (in seconds) to allow Cotengra to run for each code.
     """
-    print("run contraction cost exp with collect sparsity: ", collect_sparsity)
     if not os.path.exists(file_name):
         with open(file_name, "w") as f:
             writer = csv.writer(f, delimiter=";")
@@ -402,71 +401,6 @@ def run_all_contraction_cost_experiments(
             max_time=max_time,
             collect_sparsity=collect_sparsity
         )
-
-
-def find_sparsity_information(
-    num_runs=10,
-    file_name="tensor_sparsity_info.csv",
-    minimize="custom_flops",
-    codes=[
-        "concatenated",
-        "rotated",
-        "rotated_msp",
-        "rotated_tanner",
-        "hamming_msp",
-        "hamming_tanner",
-        "holo",
-        "bb_msp",
-        "bb_tanner",
-    ],
-):
-    tensor_networks = make_all_tensor_networks(codes)
-
-    if not os.path.exists(file_name):
-        with open(file_name, "w") as f:
-            writer = csv.writer(f, delimiter=";")
-            writer.writerow(
-                [
-                    "cost_fn",
-                    "network",
-                    "num_qubits",
-                    "num_run",
-                    "num_open_legs",
-                    "actual_tensor_size",
-                    "dense_tensor_size",
-                    "tensor_sparsity",
-                ]
-            )
-
-    for i in range(num_runs):
-        for key, creation_fn in tensor_networks.items():
-            name, num_qubits = key
-            tn = creation_fn()
-
-            print(f"Finding contraction cost for {name}, run {i+1}")
-            _, _, _, _, tensor_sparsities, _ = find_contraction_cost(
-                tn,
-                minimize=minimize,
-                verbose=False,
-                progress_reporter=TqdmProgressReporter(),
-                cotengra=True,
-            )
-
-            for open_legs, new_size, dense_size, sparsity in tensor_sparsities:
-                with open(file_name, "a") as f:
-                    writer = csv.writer(f, delimiter=";")
-                    writer.writerow(
-                        [
-                            minimize,
-                            name,
-                            num_qubits,
-                            i,
-                            open_legs,
-                            new_size,
-                            dense_size,
-                            sparsity,
-                        ]
-                    )
 
 
 if __name__ == "__main__":
