@@ -28,6 +28,7 @@ def get_intial_bruteforce_cost(tn):
         h_reduced = h_reduced[~np.all(h_reduced == 0, axis=1)]
         r = len(h_reduced)
         brute_force_operations += 2**r
+    return brute_force_operations
 
 
 def get_optimal_cost(tn):
@@ -94,6 +95,7 @@ def find_optimal_costs(file_name="optimal_costs.csv"):
 
     # These codes were the only ones that were able to finish in a reasonable amount of time
     for layer in [2, 3]:
+        print("Finding optimal cost for Concatenated Repetition code with", layer, "layers")
         tn = RepCodeTreeConcatenatedTN(layer)
         (
             upper_bount_cost,
@@ -121,6 +123,7 @@ def find_optimal_costs(file_name="optimal_costs.csv"):
             )
 
     for distance in [3]:
+        print("Finding optimal cost for Rotated Surface code with distance: ", distance)
         tn = RotatedSurfaceCodeTN(distance)
         (
             upper_bount_cost,
@@ -148,6 +151,7 @@ def find_optimal_costs(file_name="optimal_costs.csv"):
             )
 
     for layer in [2]:
+        print("Finding optimal cost for Holographic code with layers: ", layer)
         tn = HolographicHappyTN(layer)
         (
             upper_bount_cost,
