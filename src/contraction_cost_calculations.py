@@ -124,6 +124,7 @@ def run_contraction_cost_experiment(
     search_params={},
     max_repeats=128,
     max_time=None,
+    collect_sparsity=False
 ):
     """Run contraction cost experiments for the given tensor networks and save results to a CSV file.
 
@@ -137,7 +138,7 @@ def run_contraction_cost_experiment(
         max_repeats (int): Maximum number of trials to allow Cotengra to run for each code.
         max_time (int): Maximum time (in seconds) to allow Cotengra to run for each code.
     """
-
+    print("run contraction cost exp with collect sparsity: ", collect_sparsity)
     if not os.path.exists(file_name):
         with open(file_name, "w") as f:
             writer = csv.writer(f, delimiter=";")
@@ -156,6 +157,26 @@ def run_contraction_cost_experiment(
                     "time",
                 ]
             )
+
+    sparsity_file = file_name.replace(".csv", "_sparsity.csv")
+    if collect_sparsity:
+        if not os.path.exists(sparsity_file):
+            # Create new file with same name but with _sparsity added
+            with open(sparsity_file, "w") as f:
+                writer = csv.writer(f, delimiter=";")
+                writer.writerow(
+                    [
+                        "cost_fn",
+                        "methods",
+                        "network",
+                        "num_qubits",
+                        "num_run",
+                        "num_open_legs",
+                        "actual_tensor_size",
+                        "dense_tensor_size",
+                        "tensor_sparsity",
+                    ]
+                )
 
     for i in range(num_runs):
         for key, creation_fn in networks.items():
@@ -202,6 +223,25 @@ def run_contraction_cost_experiment(
                         cotengra_duration,
                     ]
                 )
+
+            if collect_sparsity:
+                for open_legs, new_size, dense_size, sparsity in tensor_sparsities:
+                    with open(sparsity_file, "a") as f:
+                        writer = csv.writer(f, delimiter=";")
+                        writer.writerow(
+                            [
+                                minimize,
+                                methods,
+                                name,
+                                num_qubits,
+                                i,
+                                open_legs,
+                                new_size,
+                                dense_size,
+                                sparsity,
+                            ]
+                        )
+                
 
 
 def make_all_tensor_networks(
@@ -314,6 +354,7 @@ def run_all_contraction_cost_experiments(
     ],
     max_repeats=128,
     max_time=None,
+    collect_sparsity=False,
 ):
     """Create tensor networks and run contraction cost experiments for flops and custom SST minimize functions.
 
@@ -346,6 +387,7 @@ def run_all_contraction_cost_experiments(
             search_params=search_params,
             max_repeats=max_repeats,
             max_time=max_time,
+            collect_sparsity=collect_sparsity
         )
 
         # Run default flops (dense) cost function with no customizations.
@@ -358,6 +400,7 @@ def run_all_contraction_cost_experiments(
             methods=[method],
             max_repeats=max_repeats,
             max_time=max_time,
+            collect_sparsity=collect_sparsity
         )
 
 
@@ -482,16 +525,12 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    if args.sparsity_collection:
-        find_sparsity_information(
-            num_runs=args.num_runs, file_name=args.file_name, codes=args.codes
-        )
-    else:
-        run_all_contraction_cost_experiments(
-            num_runs=args.num_runs,
-            file_name=args.file_name,
-            methods=args.methods,
-            codes=args.codes,
-            max_repeats=args.max_repeats,
-            max_time=args.max_time,
-        )
+    run_all_contraction_cost_experiments(
+        num_runs=args.num_runs,
+        file_name=args.file_name,
+        methods=args.methods,
+        codes=args.codes,
+        max_repeats=args.max_repeats,
+        max_time=args.max_time,
+        collect_sparsity=args.sparsity_collection
+    )

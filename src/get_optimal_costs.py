@@ -5,15 +5,14 @@ import os
 import time
 import numpy as np
 
-from planqtn.networks.holographic_happy_code import HolographicHappyTN
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "planqtn"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from planqtn.networks.holographic_happy_code import HolographicHappyTN
 from planqtn.contraction_visitors.max_size_cost_visitor import MaxTensorSizeCostVisitor
 from planqtn.contraction_visitors.sparsity_visitor import SparsityVisitor
 from planqtn.contraction_visitors.upper_bound_cost_visitor import UpperBoundCostVisitor
 from planqtn.linalg import gauss
-from compassCodes.compass_code_concatenated import RepCodeTreeConcatenatedTN
+from repetition_tree_code import RepCodeTreeConcatenatedTN
 from cotengra import OptimalOptimizer
 from planqtn.contraction_visitors.stabilizer_flops_cost_fn import (
     StabilizerCodeFlopsCostVisitor,

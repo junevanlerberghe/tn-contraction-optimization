@@ -95,7 +95,7 @@ def find_wep(
         "max_repeats": max_repeats,
     }
     start = time.time()
-    final_wep = contraction.contract(
+    final_tensor = contraction.contract(
         cotengra=cotengra,
         progress_reporter=progress_reporter,
         open_legs=open_legs,
@@ -105,6 +105,16 @@ def find_wep(
     )
     end = time.time()
     real_operations = get_tracker().get()
+
+    if len(final_tensor.tensor) > 1:
+        wep = final_tensor.ordered_key_tensor(
+            open_legs,
+            progress_reporter=progress_reporter,
+            verbose=verbose,
+        )
+    else:
+        wep = final_tensor.tensor[()]
+        wep = wep.normalize(verbose=verbose)
 
     found_tree = contraction._cot_tree
     print("tree used in wep contraction: ", found_tree)
@@ -129,7 +139,7 @@ def find_wep(
         real_operations,
         round(2**cotengra_score),
         custom_cost,
-        final_wep,
+        wep,
     )
 
 def make_all_tensor_networks(codes):
