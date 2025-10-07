@@ -20,12 +20,9 @@ class RepCodeTreeConcatenatedTN(TensorNetwork):
                 code = Legos.z_rep_code(d + 1)
 
             for i in range(d**layer):
-                print("d**layer: ", d**layer)
                 nodes[(layer, i)] = StabilizerCodeTensorEnumerator(
                     code, tensor_id=(layer, i)
                 )
-                print("adding node at layer", layer, "index", i)
-
                 # connect this node to its parent in the tree
                 parent = (layer - 1, i // d)
                 leg = i % d

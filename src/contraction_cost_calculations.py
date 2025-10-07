@@ -242,8 +242,7 @@ def make_all_tensor_networks(
 
     # MSP for Rotated Surface Code -- [[d^2,1,d]]
     for d in [3, 5]:
-        tn, _, _ = RotatedSurfaceCodeTN(d).conjoin_nodes()
-        H_surface = tn.h
+        H_surface = RotatedSurfaceCodeTN(d).conjoin_nodes().h
 
         if "rotated_msp" in codes:
             tensor_networks[("Rotated Surface MSP", d**2)] = (

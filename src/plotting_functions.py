@@ -426,6 +426,7 @@ def plot_tensor_sparsity_distribution(
     ncols = 3
     representations = df["network"].unique()
     num_reps = len(representations)
+    
     nrows = int(num_reps / ncols)
 
     fig, axes = plt.subplots(nrows, ncols, figsize=(18, 5 * nrows), sharey=True)
@@ -540,8 +541,9 @@ def plot_time_distributions_from_df(
     n_networks = len(networks)
 
     n_cols = min(3, n_networks)  # up to 3 columns
-    n_rows = math.ceil(n_networks / n_cols)
+    assert n_cols > 0, "No networks to plot."
 
+    n_rows = math.ceil(n_networks / n_cols)
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 4 * n_rows))
     axes = axes.flatten()
 
@@ -672,29 +674,29 @@ def plot_log_tensor_size_vs_open_legs(data, out_file="tensor_size_vs_open_legs.p
 def main():
     plot_time_distributions_from_df(
         "results/data/64_trials_results.csv",
-        out_file="results/images2/time_comparison_kahypar.png",
+        out_file="results/images/time_comparison_kahypar.png",
         method="kahypar",
     )
 
     plot_log_operations_bar_chart(
         "results/data/64_trials_results.csv",
-        out_file="results/images2/bar_chart_log_64_trials_kahypar.png",
+        out_file="results/images/bar_chart_log_64_trials_kahypar.png",
         method="kahypar",
     )
 
     plot_tensor_sparsity_distribution(
         "results/data/tensor_sparsity_info.csv",
-        out_file="results/images2/tensor_sparsity_dist.png",
+        out_file="results/images/tensor_sparsity_dist.png",
     )
 
     plot_operations_comparison_scatter(
         "results/data/wep_calculations_operations_comparison.csv",
-        out_file="results/images2/scatter_plot_comparison.png",
+        out_file="results/images/scatter_plot_comparison.png",
     )
 
     plot_log_tensor_size_vs_open_legs(
         "results/data/tensor_sparsity_info.csv",
-        out_file="results/images2/tensor_size_vs_open_legs.png",
+        out_file="results/images/tensor_size_vs_open_legs.png",
     )
 
 if __name__ == "__main__":
