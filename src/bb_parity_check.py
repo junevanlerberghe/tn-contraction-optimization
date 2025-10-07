@@ -3,7 +3,7 @@ import numpy as np
 
 PolyTerm = Tuple[str, Union[int, Tuple[int, int]]]
 
-# Each preset is just the (l, m, a, b) tuple
+# Each preset defines the paramaters l, m and polynomials a and b
 BB_PRESETS = {
     18: {
         "l": 3,
@@ -37,6 +37,7 @@ BB_PRESETS = {
     },
 }
 
+
 def get_bb_params(num_qubits: int) -> tuple[int, int, List[PolyTerm], List[PolyTerm]]:
     """Return (l, m, a, b) for a given named BB code."""
     preset = BB_PRESETS[num_qubits]
@@ -63,8 +64,6 @@ def make_xy_matrix(l: int, m: int, px: int, py: int) -> np.ndarray:
     X = np.linalg.matrix_power(make_x_matrix(l, m), px)
     Y = np.linalg.matrix_power(make_y_matrix(l, m), py)
     return (X @ Y) % 2
-
-
 
 
 def term_to_matrix(l: int, m: int, term: PolyTerm) -> np.ndarray:

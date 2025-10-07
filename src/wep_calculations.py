@@ -6,6 +6,7 @@ import os
 import time
 import numpy as np
 from typing import Dict, List, Tuple
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "planqtn"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -21,7 +22,11 @@ from planqtn.networks.stabilizer_measurement_state_prep import (
     StabilizerMeasurementStatePrepTN,
 )
 
-from planqtn.tensor_network import Contraction, TensorNetwork
+from planqtn.tensor_network import (
+    _PartiallyTracedEnumerator,
+    Contraction,
+    TensorNetwork,
+)
 from planqtn.contraction_visitors.stabilizer_flops_cost_fn import (
     StabilizerCodeFlopsCostVisitor,
 )
@@ -30,6 +35,7 @@ from utils import generate_hamming_parity_check
 from planqtn.progress_reporter import TqdmProgressReporter
 from planqtn.progress_reporter import DummyProgressReporter, ProgressReporter
 from planqtn.stabilizer_tensor_enumerator import StabilizerCodeTensorEnumerator
+from planqtn.operation_tracker import get_tracker
 
 
 def find_wep(
@@ -42,7 +48,7 @@ def find_wep(
     progress_reporter: ProgressReporter = DummyProgressReporter(),
     cotengra: bool = True,
     max_repeats: int = 128,
-    max_time: int = None
+    max_time: int = None,
 ):
     """Finds the contraction cost of a tensor network using cotengra to find a contraction schedule.
     Calculates both the upper bound cost from the open legs and the number of operations it will take to
@@ -70,30 +76,43 @@ def find_wep(
         r = len(h_reduced)
         brute_force_operations += 2**r
 
-    print("Running stabilizer enumerator polynomial with search params: ", search_params)
-    start = time.time()
+    print(
+        "Running stabilizer enumerator polynomial with search params: ", search_params
+    )
+    get_tracker().reset()
 
-    final_wep, real_operations, cot_tree = tn.stabilizer_enumerator_polynomial(
-        verbose=verbose,
+    contraction = Contraction[_PartiallyTracedEnumerator](
+        tn,
+        lambda node: _PartiallyTracedEnumerator.from_stabilizer_code_tensor_enumerator(
+            node, tn.truncate_length, verbose, progress_reporter, open_legs
+        ),
+    )
+
+    cotengra_opts = {
+        "minimize": minimize,
+        "methods": methods,
+        "max_time": max_time,
+        "max_repeats": max_repeats,
+    }
+    start = time.time()
+    final_wep = contraction.contract(
         cotengra=cotengra,
-        open_legs=open_legs,
-        cotengra_opts = {
-            "minimize": minimize, 
-            "methods": methods, 
-            "max_time": max_time, 
-            "max_repeats": max_repeats
-        },
         progress_reporter=progress_reporter,
+        open_legs=open_legs,
+        verbose=verbose,
+        cotengra_opts=cotengra_opts,
         search_params=search_params,
     )
     end = time.time()
+    real_operations = get_tracker().get()
+
+    found_tree = contraction._cot_tree
+    print("tree used in wep contraction: ", found_tree)
 
     contraction = Contraction[StabilizerCodeTensorEnumerator](
-        tn,
-        lambda node: node.copy(),
-        cotengra_tree=cot_tree
+        tn, lambda node: node.copy(), cotengra_tree=found_tree
     )
-    cotengra_score = cot_tree.get_score()
+    cotengra_score = found_tree.get_score()
 
     cost_visitor = StabilizerCodeFlopsCostVisitor()
     contraction.contract(
@@ -110,13 +129,10 @@ def find_wep(
         real_operations,
         round(2**cotengra_score),
         custom_cost,
-        final_wep
+        final_wep,
     )
 
-
-def make_all_tensor_networks(
-    codes
-):
+def make_all_tensor_networks(codes):
     tensor_networks = {}
 
     for layer in [2, 3, 4, 5]:
@@ -135,9 +151,8 @@ def make_all_tensor_networks(
 
     # MSP for Rotated Surface Code -- [[d^2,1,d]]
     for d in [3, 5]:
-        tn , _, _ = RotatedSurfaceCodeTN(d).conjoin_nodes()
+        H_surface = RotatedSurfaceCodeTN(d).conjoin_nodes().h
 
-        H_surface = tn.h
         if "rotated_msp" in codes:
             tensor_networks[("Rotated Surface MSP", d**2)] = (
                 lambda H_surface=H_surface: StabilizerMeasurementStatePrepTN(H_surface)
@@ -159,9 +174,7 @@ def make_all_tensor_networks(
 
         if "hamming_tanner" in codes:
             tensor_networks[("Hamming Tanner", 2**r - 1)] = (
-                lambda r=r: StabilizerTannerCodeTN(
-                    generate_hamming_parity_check(r)
-                )
+                lambda r=r: StabilizerTannerCodeTN(generate_hamming_parity_check(r))
             )
 
     # Holographic Happy TN - [[25,11,3]], [[95,51,3]]
@@ -197,10 +210,20 @@ def find_weps(
     num_runs=100,
     file_name="contraction_costs.csv",
     methods=["greedy", "kahypar"],
-    codes=["concatenated", "rotated", "rotated_msp", "rotated_tanner", "hamming_msp", "hamming_tanner", "holo", "bb_msp", "bb_tanner"],
+    codes=[
+        "concatenated",
+        "rotated",
+        "rotated_msp",
+        "rotated_tanner",
+        "hamming_msp",
+        "hamming_tanner",
+        "holo",
+        "bb_msp",
+        "bb_tanner",
+    ],
     max_repeats=128,
     max_time=None,
-    minimize="flops"
+    minimize="flops",
 ):
     """Create tensor networks and run contraction cost experiments for combo and custom minimize functions.
 
@@ -234,7 +257,7 @@ def find_weps(
                         "cotengra_cost",
                         "custom_cost",
                         "time",
-                        "wep"
+                        "wep",
                     ]
                 )
 
@@ -245,13 +268,7 @@ def find_weps(
 
                 print(f"Finding contraction cost for {name}, run {i+1}")
 
-                (
-                    duration,
-                    real_operations,
-                    cotengra_cost,
-                    custom_cost,
-                    wep
-                ) = find_wep(
+                (duration, real_operations, cotengra_cost, custom_cost, wep) = find_wep(
                     tn,
                     minimize=minimize,
                     methods=methods,
@@ -260,7 +277,7 @@ def find_weps(
                     cotengra=True,
                     search_params=copy.deepcopy(search_params),
                     max_repeats=max_repeats,
-                    max_time=max_time
+                    max_time=max_time,
                 )
 
                 with open(file_name, "a") as f:
@@ -276,7 +293,7 @@ def find_weps(
                             cotengra_cost,
                             custom_cost,
                             duration,
-                            wep
+                            wep,
                         ]
                     )
 
@@ -303,10 +320,20 @@ if __name__ == "__main__":
         help="List of methods to use for contraction (e.g., greedy, kahypar).",
     )
     parser.add_argument(
-        "--codes", 
-        nargs="+", 
-        default=["concatenated", "rotated", "rotated_msp", "rotated_tanner", "hamming_msp", "hamming_tanner", "holo", "bb_msp", "bb_tanner"],
-        help="List of methods to run (concatenated, rotated_surface, hamming, holo, bb)"
+        "--codes",
+        nargs="+",
+        default=[
+            "concatenated",
+            "rotated",
+            "rotated_msp",
+            "rotated_tanner",
+            "hamming_msp",
+            "hamming_tanner",
+            "holo",
+            "bb_msp",
+            "bb_tanner",
+        ],
+        help="List of methods to run (concatenated, rotated_surface, hamming, holo, bb)",
     )
     parser.add_argument(
         "--max_time",
@@ -324,11 +351,11 @@ if __name__ == "__main__":
         "--minimize",
         type=str,
         default="custom_flops",
-        help="Minimize strategy to use (custom_flops, custom_size, flops, size, combo)"
+        help="Minimize strategy to use (custom_flops, custom_size, flops, size, combo)",
     )
 
     args = parser.parse_args()
-    
+
     find_weps(
         num_runs=args.num_runs,
         file_name=args.file_name,
@@ -336,5 +363,5 @@ if __name__ == "__main__":
         codes=args.codes,
         max_repeats=args.max_repeats,
         max_time=args.max_time,
-        minimize=args.minimize
+        minimize=args.minimize,
     )
