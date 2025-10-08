@@ -138,7 +138,7 @@ def plot_log_operations_bar_chart(
         ).reset_index()
 
         not_log_df["improvement_default_custom"] = round(
-            not_log_df["flops"] / not_log_df["custom_flops"], 2
+            not_log_df["flops"] / not_log_df["custom_flops"], 3
         )
 
         # Group data by tensor_network, num_qubits, and cost_fn to compute mean and std dev of log2 operations
@@ -292,10 +292,14 @@ def plot_log_operations_bar_chart(
             # Improvement factor text above bars
             if row["tensor_network"] == "BB MSP":
                 i = i + 0.3
+            if row["improvement_default_custom"] > 1e3:
+                factor_label = f"{row["improvement_default_custom"]:.3e}"  # scientific
+            else:
+                factor_label = f"{row["improvement_default_custom"]:.3f}"
             ax.text(
                 i,
                 y,
-                f"{row["improvement_default_custom"]:.2f}x",
+                f"{factor_label}x",
                 ha="center",
                 va="bottom",
                 fontsize=11,
@@ -680,8 +684,8 @@ def main():
 
     plot_log_operations_bar_chart(
         "results/data/64_trials_results.csv",
-        out_file="results/images/bar_chart_log_64_trials_kahypar.png",
-        method="kahypar",
+        out_file="results/images/bar_chart_log_64_trials_greedy.png",
+        method="greedy",
     )
 
     plot_tensor_sparsity_distribution(
