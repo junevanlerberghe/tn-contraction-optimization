@@ -414,7 +414,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num_runs",
         type=int,
-        default=10,
+        default=100,
         help="Number of runs for each tensor network.",
     )
     parser.add_argument(

@@ -60,7 +60,7 @@ def get_optimal_cost(tn):
     sparsity_visitor = SparsityVisitor()
     max_size_visitor = MaxTensorSizeCostVisitor()
 
-    contraction.contract(visitors=[cost_visitor], cotengra=False)
+    contraction.contract(visitors=[cost_visitor, upper_bound_visitor, sparsity_visitor, max_size_visitor], cotengra=False)
 
     upper_bound_cost = upper_bound_visitor.total_cost + initial_bruteforce
     contraction_cost = cost_visitor.total_cost + initial_bruteforce
@@ -102,10 +102,12 @@ def find_optimal_costs(file_name="optimal_costs.csv"):
             custom_cost,
             cost_with_bruteforce,
             max_size,
-            avg_sparsity,
+            tensor_sparsities,
             duration,
         ) = get_optimal_cost(tn)
 
+        sparsities = [s[-1] for s in tensor_sparsities]
+        avg_sparsity = np.round(np.mean(sparsities), 5)
         with open(file_name, "a") as f:
             writer = csv.writer(f, delimiter=";")
             writer.writerow(
@@ -130,10 +132,12 @@ def find_optimal_costs(file_name="optimal_costs.csv"):
             custom_cost,
             cost_with_bruteforce,
             max_size,
-            avg_sparsity,
+            tensor_sparsities,
             duration,
         ) = get_optimal_cost(tn)
 
+        sparsities = [s[-1] for s in tensor_sparsities]
+        avg_sparsity = np.round(np.mean(sparsities), 5)
         with open(file_name, "a") as f:
             writer = csv.writer(f, delimiter=";")
             writer.writerow(
@@ -158,10 +162,12 @@ def find_optimal_costs(file_name="optimal_costs.csv"):
             custom_cost,
             cost_with_bruteforce,
             max_size,
-            avg_sparsity,
+            tensor_sparsities,
             duration,
         ) = get_optimal_cost(tn)
 
+        sparsities = [s[-1] for s in tensor_sparsities]
+        avg_sparsity = np.round(np.mean(sparsities), 5)
         with open(file_name, "a") as f:
             writer = csv.writer(f, delimiter=";")
             writer.writerow(
