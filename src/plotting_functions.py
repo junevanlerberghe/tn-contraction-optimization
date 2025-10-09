@@ -74,7 +74,7 @@ def add_brute_force_costs(df):
 
 
 def plot_log_operations_bar_chart(
-    contraction_cost_file, out_file="bar_chart_log_operations.png", method=None
+    contraction_cost_file, out_file="bar_chart_log_operations.pdf", method=None
 ):
     """Plots a bar chart comparing the contraction costs using default dense and custom SST cost functions.
 
@@ -137,9 +137,7 @@ def plot_log_operations_bar_chart(
             index=["tensor_network", "num_qubits"], columns="cost_fn", values="avg_ops"
         ).reset_index()
 
-        not_log_df["improvement_default_custom"] = round(
-            not_log_df["flops"] / not_log_df["custom_flops"], 3
-        )
+        not_log_df["improvement_default_custom"] = not_log_df["flops"] / not_log_df["custom_flops"]
 
         # Group data by tensor_network, num_qubits, and cost_fn to compute mean and std dev of log2 operations
         grouped_df_log = (
@@ -213,7 +211,7 @@ def plot_log_operations_bar_chart(
             if row["tensor_network"] == "BB MSP":
                 y += 0.05 * bar_height
             if row["tensor_network"] == "Hamming MSP":
-                y += 0.05 * bar_height
+                y += 0.09 * bar_height
 
             groups.setdefault(row["tensor_network"], []).append(i)
 
@@ -253,7 +251,7 @@ def plot_log_operations_bar_chart(
                 color=GROUP_COLORS[row["tensor_network"]],
                 edgecolor="black",
                 alpha=0.4,
-                label=f"Dense Cost" if i == 0 else "",
+                label=f"Dense Tensor Cost" if i == 0 else "",
             )
 
             # Brute force cost bar
@@ -292,7 +290,7 @@ def plot_log_operations_bar_chart(
             # Improvement factor text above bars
             if row["tensor_network"] == "BB MSP":
                 i = i + 0.3
-            if row["improvement_default_custom"] > 1e3:
+            if row["improvement_default_custom"] > 1e3 or row["improvement_default_custom"] < 1e-2:
                 factor_label = f"{row["improvement_default_custom"]:.3e}"  # scientific
             else:
                 factor_label = f"{row["improvement_default_custom"]:.3f}"
@@ -326,7 +324,7 @@ def plot_log_operations_bar_chart(
         ax.set_yticklabels(ytick_labels)
 
         # Make legend colors dark gray and light gray
-        legend = ax.legend(fontsize=16, loc="upper center")
+        legend = ax.legend(fontsize=16, loc="upper center", bbox_to_anchor=(0.40, 1.0))
         legend.legend_handles[0].set_color("#5A5C5E")
         legend.legend_handles[1].set_color("#94989C")
 
@@ -355,13 +353,11 @@ def plot_log_operations_bar_chart(
 
     plt.subplots_adjust(bottom=0.1)
     plt.tight_layout()
-
-    output_pdf = out_file.replace(".png", ".pdf")
-    plt.savefig(output_pdf, format="pdf", dpi=500)
+    plt.savefig(out_file, format="pdf", dpi=500)
     plt.close()
 
 
-def plot_operations_comparison_scatter(data_file, out_file="scatter_comparison.png"):
+def plot_operations_comparison_scatter(data_file, out_file="scatter_comparison.pdf"):
     """Plots the actual contraction cost vs the estimated cost from cotengra and custom cost function.
 
     Args:
@@ -390,7 +386,7 @@ def plot_operations_comparison_scatter(data_file, out_file="scatter_comparison.p
         ax.grid(True)
         ax.tick_params(axis="both", which="major", labelsize=18)
 
-    plot_by_rep(df, "Dense Cost", axs[0], "cotengra_cost")
+    plot_by_rep(df, "Dense Tensor Cost", axs[0], "cotengra_cost")
     plot_by_rep(df, "Sparse Stabilizer Tensor Cost", axs[1], "custom_cost")
     axs[0].set_ylabel("Contraction Cost", fontsize=24)
 
@@ -408,13 +404,12 @@ def plot_operations_comparison_scatter(data_file, out_file="scatter_comparison.p
     )
 
     plt.tight_layout()
-    output_pdf = out_file.replace(".png", ".pdf")
-    plt.savefig(output_pdf, format="pdf", dpi=500)
+    plt.savefig(out_file, format="pdf", dpi=500)
     plt.close()
 
 
 def plot_tensor_sparsity_distribution(
-    data_file_name, out_file="tensor_sparsity_dist.png"
+    data_file_name, out_file="tensor_sparsity_dist.pdf", method = "max"
 ):
     """Plots the distribution of sparsity of the intermediate tensors.
 
@@ -425,12 +420,12 @@ def plot_tensor_sparsity_distribution(
     df = pd.read_csv(data_file_name, sep=";")
 
     # Only plot the largest code from each family
-    df = df[df.groupby("network")["num_qubits"].transform("max") == df["num_qubits"]]
+    df = df[df.groupby("network")["num_qubits"].transform(method) == df["num_qubits"]]
 
     ncols = 3
     representations = df["network"].unique()
     num_reps = len(representations)
-    
+
     nrows = int(num_reps / ncols)
 
     fig, axes = plt.subplots(nrows, ncols, figsize=(18, 5 * nrows), sharey=True)
@@ -505,15 +500,14 @@ def plot_tensor_sparsity_distribution(
         ax.tick_params(axis="both", which="major", labelsize=16)
 
     plt.tight_layout()
-    output_pdf = out_file.replace(".png", ".pdf")
-    plt.savefig(output_pdf, format="pdf", dpi=500)
+    plt.savefig(out_file, format="pdf", dpi=500)
     plt.close()
 
 
 def plot_time_distributions_from_df(
     data,
     bins=30,
-    out_file="time_distributions.png",
+    out_file="time_distributions.pdf",
     method=None,
 ):
     """
@@ -595,12 +589,11 @@ def plot_time_distributions_from_df(
         ax.legend(fontsize=16)
 
     plt.tight_layout()
-    output_pdf = out_file.replace(".png", ".pdf")
-    plt.savefig(output_pdf, format="pdf", dpi=500)
+    plt.savefig(out_file, format="pdf", dpi=500)
     plt.close()
 
 
-def plot_log_tensor_size_vs_open_legs(data, out_file="tensor_size_vs_open_legs.png"):
+def plot_log_tensor_size_vs_open_legs(data, out_file="tensor_size_vs_open_legs.pdf"):
     """
     Plot log₄(tensor_size) vs number of open legs for each family.
     Separate plots for actual_tensor_size and dense_tensor_size.
@@ -669,39 +662,69 @@ def plot_log_tensor_size_vs_open_legs(data, out_file="tensor_size_vs_open_legs.p
     ax.tick_params(axis="both", which="major", labelsize=14)
 
     plt.tight_layout()
-
-    output_pdf = out_file.replace(".png", ".pdf")
-    plt.savefig(output_pdf, format="pdf", dpi=500)
+    plt.savefig(out_file, format="pdf", dpi=500)
     plt.close()
 
 
 def main():
     plot_time_distributions_from_df(
         "results/data/64_trials_results.csv",
-        out_file="results/images/time_comparison_kahypar.png",
+        out_file="results/images/time_comparison_kahypar.pdf",
         method="kahypar",
+    )
+
+    plot_time_distributions_from_df(
+        "results/data/64_trials_results.csv",
+        out_file="results/images/time_comparison_greedy.pdf",
+        method="greedy",
     )
 
     plot_log_operations_bar_chart(
         "results/data/64_trials_results.csv",
-        out_file="results/images/bar_chart_log_64_trials_greedy.png",
+        out_file="results/images/bar_chart_log_64_trials_greedy.pdf",
         method="greedy",
+    )
+
+    plot_log_operations_bar_chart(
+        "results/data/64_trials_results.csv",
+        out_file="results/images/bar_chart_log_64_trials_kahypar.pdf",
+        method="kahypar",
+    )
+
+    plot_log_operations_bar_chart(
+        "results/data/5_min_cutoff_results_greedy.csv",
+        out_file="results/images/bar_chart_log_5min_greedy.pdf",
+        method="greedy",
+    )
+
+    plot_log_operations_bar_chart(
+        "results/data/5_min_cutoff_results_kahypar.csv",
+        out_file="results/images/bar_chart_log_5min_kahypar.pdf",
+        method="kahypar",
     )
 
     plot_tensor_sparsity_distribution(
         "results/data/tensor_sparsity_info.csv",
-        out_file="results/images/tensor_sparsity_dist.png",
+        out_file="results/images/tensor_sparsity_dist.pdf",
+        method="max",
+    )
+
+    plot_tensor_sparsity_distribution(
+        "results/data/tensor_sparsity_info.csv",
+        out_file="results/images/tensor_sparsity_dist_small.pdf",
+        method="min",
     )
 
     plot_operations_comparison_scatter(
         "results/data/wep_calculations_operations_comparison.csv",
-        out_file="results/images/scatter_plot_comparison.png",
+        out_file="results/images/scatter_comparison.pdf",
     )
 
     plot_log_tensor_size_vs_open_legs(
         "results/data/tensor_sparsity_info.csv",
-        out_file="results/images/tensor_size_vs_open_legs.png",
+        out_file="results/images/tensor_size_vs_open_legs.pdf",
     )
+
 
 if __name__ == "__main__":
     main()
