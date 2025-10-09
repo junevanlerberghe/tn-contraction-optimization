@@ -281,7 +281,7 @@ def find_weps(
                 (duration, real_operations, cotengra_cost, custom_cost, wep) = find_wep(
                     tn,
                     minimize=minimize,
-                    methods=methods,
+                    methods=method,
                     verbose=False,
                     progress_reporter=TqdmProgressReporter(),
                     cotengra=True,
@@ -295,7 +295,7 @@ def find_weps(
                     writer.writerow(
                         [
                             minimize,
-                            methods,
+                            method,
                             name,
                             num_qubits,
                             i,
