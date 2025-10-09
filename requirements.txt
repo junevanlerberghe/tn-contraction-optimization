@@ -1,5 +1,6 @@
 pandas
+kahypar
 
 # Install local versions of the packages
-./planqtn
 ./cotengra
+./planqtn
