@@ -353,6 +353,7 @@ def run_all_contraction_cost_experiments(
     ],
     max_repeats=128,
     max_time=None,
+    minimize=["custom_flops","flops"],
     collect_sparsity=False,
 ):
     """Create tensor networks and run contraction cost experiments for flops and custom SST minimize functions.
@@ -368,39 +369,27 @@ def run_all_contraction_cost_experiments(
 
     for method in methods:
         search_params = {}
-        if method == "kahypar":
-            search_params = {
-                "greedy_minimizer": "custom_flops",
-                "optimal_minimizer": "custom_flops",
-                "sub_optimize_minimizer": "custom_flops",
-            }
+        for min in minimize:
+            # If Kahypar, also use custom flops for the internal greedy and optimal minimizers.
+            if method == "kahypar" and min == "custom_flops":
+                search_params = {
+                    "greedy_minimizer": "custom_flops",
+                    "optimal_minimizer": "custom_flops",
+                    "sub_optimize_minimizer": "custom_flops",
+                }
 
-        # Run SST cost function. If Kahypar, also use flops for the internal greedy and optimal minimizers.
-        tensor_networks = make_all_tensor_networks(codes)
-        run_contraction_cost_experiment(
-            tensor_networks,
-            num_runs,
-            file_name,
-            minimize="custom_flops",
-            methods=[method],
-            search_params=search_params,
-            max_repeats=max_repeats,
-            max_time=max_time,
-            collect_sparsity=collect_sparsity
-        )
-
-        # Run default flops (dense) cost function with no customizations.
-        tensor_networks = make_all_tensor_networks(codes)
-        run_contraction_cost_experiment(
-            tensor_networks,
-            num_runs,
-            file_name,
-            minimize="flops",
-            methods=[method],
-            max_repeats=max_repeats,
-            max_time=max_time,
-            collect_sparsity=collect_sparsity
-        )
+            tensor_networks = make_all_tensor_networks(codes)
+            run_contraction_cost_experiment(
+                tensor_networks,
+                num_runs,
+                file_name,
+                minimize=min,
+                methods=[method],
+                search_params=search_params,
+                max_repeats=max_repeats,
+                max_time=max_time,
+                collect_sparsity=collect_sparsity
+            )
 
 
 if __name__ == "__main__":
@@ -453,6 +442,13 @@ if __name__ == "__main__":
         help="Maximum number of trials to allow Cotengra to run for each code.",
     )
     parser.add_argument(
+        "--minimize",
+        type=str,
+        nargs="+",
+        default=["custom_flops","flops"],
+        help="The cost function to minimize when finding the contraction schedule (custom_flops or flops or both).",
+    )
+    parser.add_argument(
         "--sparsity_collection",
         action="store_true",
         help="Collect tensor sparsity data instead of contraction cost",
@@ -466,5 +462,6 @@ if __name__ == "__main__":
         codes=args.codes,
         max_repeats=args.max_repeats,
         max_time=args.max_time,
+        minimize=args.minimize,
         collect_sparsity=args.sparsity_collection
     )
