@@ -139,6 +139,14 @@ def plot_log_operations_bar_chart(
 
         not_log_df["improvement_default_custom"] = not_log_df["flops"] / not_log_df["custom_flops"]
 
+        latex_table = not_log_df[["tensor_network", "num_qubits", "flops", "custom_flops", "improvement_default_custom"]].to_latex(index=False, float_format="%.3e")
+        
+        base, _ = os.path.splitext(out_file)
+        table_file = f"{base}_table.tex"
+        with open(table_file, "w") as f:
+            f.write(latex_table)
+
+
         # Group data by tensor_network, num_qubits, and cost_fn to compute mean and std dev of log2 operations
         grouped_df_log = (
             df_m.groupby(["tensor_network", "num_qubits", "cost_fn"])["operations_log2"]
@@ -287,22 +295,6 @@ def plot_log_operations_bar_chart(
                     label="Optimal Cost" if i == 0 else "",
                 )
 
-            # Improvement factor text above bars
-            if row["tensor_network"] == "BB MSP":
-                i = i + 0.3
-            if row["improvement_default_custom"] > 1e3 or row["improvement_default_custom"] < 1e-2:
-                factor_label = f"{row["improvement_default_custom"]:.3e}"  # scientific
-            else:
-                factor_label = f"{row["improvement_default_custom"]:.3f}"
-            ax.text(
-                i,
-                y,
-                f"{factor_label}x",
-                ha="center",
-                va="bottom",
-                fontsize=11,
-                fontweight="bold",
-            )
 
         ax.set_xticks(np.arange(len(merged)))
         ax.set_xticklabels(
@@ -364,7 +356,7 @@ def plot_operations_comparison_scatter(data_file, out_file="scatter_comparison.p
         data_file: File name that contains data in CSV format.
         out_file: Output file name for the plot.
     """
-    fig, axs = plt.subplots(1, 2, figsize=(12, 8), sharey=True)
+    fig, axs = plt.subplots(1, 2, figsize=(12, 8), sharey=True, sharex=True)
     axs = axs.flatten()
 
     df = pd.read_csv(data_file, sep=";")
@@ -383,6 +375,7 @@ def plot_operations_comparison_scatter(data_file, out_file="scatter_comparison.p
         ax.set_xlabel(x_label, fontsize=24)
         ax.set_xscale("log")
         ax.set_yscale("log")
+        # ax.set_ylim(0, 10**8)
         ax.grid(True)
         ax.tick_params(axis="both", which="major", labelsize=18)
 
@@ -405,6 +398,54 @@ def plot_operations_comparison_scatter(data_file, out_file="scatter_comparison.p
 
     plt.tight_layout()
     plt.savefig(out_file, format="pdf", dpi=500)
+    plt.close()
+
+
+def plot_operations_scatter_same_plot(
+    data_file, out_file="scatter_comparison.png"
+):
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    df = pd.read_csv(data_file, sep=";")
+
+    # Unique representations
+    representations = df["tensor_network"].unique()
+
+    # Plot default with circles
+    for rep in representations:
+        subdf = df[df["tensor_network"] == rep]
+        nq = int(subdf["num_qubits"].iloc[0])
+        ax.scatter(
+            subdf["cotengra_cost"],
+            subdf["real_operations"],
+            label=RENAME_MAP.get(rep, rep) + " (dense)",
+            color=GROUP_COLORS.get(rep, rep),
+            alpha=0.4,
+            marker="x",  # circle
+        )
+
+    # Plot custom with squares
+    for rep in representations:
+        subdf = df[df["tensor_network"] == rep]
+        nq = int(subdf["num_qubits"].iloc[0])
+        ax.scatter(
+            subdf["custom_cost"],
+            subdf["real_operations"],
+            label=RENAME_MAP.get(rep, rep) + " (SST)",
+            color=GROUP_COLORS.get(rep, rep),
+            marker="s",  # square
+        )
+
+    # Axes formatting
+    ax.set_xlabel("Estimated Cost", fontsize=20)
+    ax.set_ylabel("Actual Cost", fontsize=20)
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.grid(True)
+
+    ax.legend(fontsize=16, bbox_to_anchor=(1.05, 1), loc="upper left")
+    plt.tight_layout()
+    plt.savefig(out_file, bbox_inches="tight")
     plt.close()
 
 
@@ -571,13 +612,17 @@ def plot_time_distributions_from_df(
                 label="SST",
             )
 
+        if method == "kahypar":
+            alpha = 0.4
+        else:
+            alpha = 1
         if not flops_times.empty:
             counts, bin_edges = np.histogram(flops_times, bins=bins)
             ax.bar(
                 bin_edges[:-1],
                 counts / counts.sum(),
                 width=np.diff(bin_edges),
-                alpha=0.6,
+                alpha=alpha,
                 color="gray",
                 label="Dense",
             )
@@ -681,25 +726,25 @@ def main():
 
     plot_log_operations_bar_chart(
         "results/data/64_trials_results.csv",
-        out_file="results/images/bar_chart_log_64_trials_greedy.pdf",
+        out_file="results/images/bar_chart_64_trials_greedy.pdf",
         method="greedy",
     )
 
     plot_log_operations_bar_chart(
         "results/data/64_trials_results.csv",
-        out_file="results/images/bar_chart_log_64_trials_kahypar.pdf",
+        out_file="results/images/bar_chart_64_trials_kahypar.pdf",
         method="kahypar",
     )
 
     plot_log_operations_bar_chart(
-        "results/data/5_min_cutoff_results_greedy.csv",
-        out_file="results/images/bar_chart_log_5min_greedy.pdf",
+        "results/data/5_min_cutoff_results.csv",
+        out_file="results/images/bar_chart_5min_greedy.pdf",
         method="greedy",
     )
 
     plot_log_operations_bar_chart(
-        "results/data/5_min_cutoff_results_kahypar.csv",
-        out_file="results/images/bar_chart_log_5min_kahypar.pdf",
+        "results/data/5_min_cutoff_results.csv",
+        out_file="results/images/bar_chart_5min_kahypar.pdf",
         method="kahypar",
     )
 

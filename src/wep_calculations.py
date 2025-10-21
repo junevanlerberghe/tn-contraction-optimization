@@ -160,7 +160,7 @@ def make_all_tensor_networks(codes):
             )
 
     # MSP for Rotated Surface Code -- [[d^2,1,d]]
-    for d in [3, 5]:
+    for d in [3]:
         H_surface = RotatedSurfaceCodeTN(d).conjoin_nodes().h
 
         if "rotated_msp" in codes:
@@ -189,29 +189,12 @@ def make_all_tensor_networks(codes):
 
     # Holographic Happy TN - [[25,11,3]], [[95,51,3]]
     if "holo" in codes:
-        layers = [2, 3]
-        n_qubits = [25, 95]
+        layers = [2]
+        n_qubits = [25]
         for i in range(len(layers)):
             tensor_networks[("Holographic", n_qubits[i])] = lambda layer=layers[
                 i
             ]: HolographicHappyTN(layer)
-
-    #  # BB Code MSP
-    bb_codes = [18]
-
-    for i in range(len(bb_codes)):
-        l, m, a, b = get_bb_params(bb_codes[i])
-        H_bb = create_full_parity_check(l, m, a, b)
-
-        if "bb_msp" in codes:
-            tensor_networks[("BB MSP", bb_codes[i])] = (
-                lambda H_bb=H_bb: StabilizerMeasurementStatePrepTN(H_bb)
-            )
-
-        if "bb_tanner" in codes:
-            tensor_networks[("BB Tanner", bb_codes[i])] = (
-                lambda H_bb=H_bb: StabilizerTannerCodeTN(H_bb)
-            )
 
     return tensor_networks
 
