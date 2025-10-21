@@ -1,5 +1,6 @@
 pandas
 kahypar
+Jinja2
 
 # Install local versions of the packages
 ./cotengra
