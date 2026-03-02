@@ -31,12 +31,11 @@ from planqtn.contraction_visitors.stabilizer_flops_cost_fn import (
     StabilizerCodeFlopsCostVisitor,
 )
 
-from utils import generate_hamming_parity_check
+from utils import generate_hamming_parity_check, generate_rotated_surface_code
 from planqtn.progress_reporter import TqdmProgressReporter
 from planqtn.progress_reporter import DummyProgressReporter, ProgressReporter
 from planqtn.stabilizer_tensor_enumerator import StabilizerCodeTensorEnumerator
 from planqtn.operation_tracker import get_tracker
-
 
 def find_wep(
     tn: TensorNetwork,
@@ -160,8 +159,8 @@ def make_all_tensor_networks(codes):
             )
 
     # MSP for Rotated Surface Code -- [[d^2,1,d]]
-    for d in [3]:
-        H_surface = RotatedSurfaceCodeTN(d).conjoin_nodes().h
+    for d in [3, 5]:
+        H_surface = generate_rotated_surface_code(d)
 
         if "rotated_msp" in codes:
             tensor_networks[("Rotated Surface MSP", d**2)] = (

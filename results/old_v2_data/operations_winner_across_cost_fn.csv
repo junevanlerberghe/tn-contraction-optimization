@@ -1,0 +1,21 @@
+tensor_network,num_qubits,greedy_custom_flops,greedy_flops,kahypar_custom_flops,kahypar_flops,winner
+BB MSP,18,373627272.9,12303096139720.81,3329895.3958333335,51875973460.22449,kahypar_custom_flops
+BB MSP,30,10810004238237.07,1.5018457293252137e+18,,9.510285246752437e+16,greedy_custom_flops
+BB Tanner,18,965285105.28,7081705144.78,105780696.98,7512514802.16,kahypar_custom_flops
+BB Tanner,30,6200248415349.48,7029917079563.34,291463845904.06,6602898078999.012,kahypar_custom_flops
+Concatenated Repetition,9,10.0,10.0,10.0,10.0,greedy_flops=greedy_custom_flops=kahypar_flops=kahypar_custom_flops
+Concatenated Repetition,27,116.32,124.38,129.72,130.88,greedy_custom_flops
+Concatenated Repetition,81,477.4,483.4,488.0,614.42,greedy_custom_flops
+Hamming MSP,7,1346.3,1884.84,1292.58,2568.32,kahypar_custom_flops
+Hamming MSP,15,1144560.6,5488283024.15,305672.02,93566974.89,kahypar_custom_flops
+Hamming Tanner,7,810.04,950.6,938.0,1052.72,greedy_custom_flops
+Hamming Tanner,15,1860557.44,6003867.84,2540035.12,4058285.6,greedy_custom_flops
+Holographic,25,2497.12,3341.44,2529.28,3232.48,greedy_custom_flops
+Holographic,95,2945603.04,5074359.36,2019956.16,2583714.24,kahypar_custom_flops
+Rotated Surface,9,73.84,139.12,76.0,272.0,greedy_custom_flops
+Rotated Surface,25,1005.8,1576.12,620.16,1736.56,kahypar_custom_flops
+Rotated Surface,49,7724.04,13213.96,4502.08,14458.04,kahypar_custom_flops
+Rotated Surface MSP,9,1218.28,1330.97,1405.6,1663.2,greedy_custom_flops
+Rotated Surface MSP,25,4274711.46,59974179.46,6207566.757575758,270320157.84,greedy_custom_flops
+Rotated Surface Tanner,9,493.82,588.6,503.68,578.28,greedy_custom_flops
+Rotated Surface Tanner,25,6569008.44,28756364.24,7522532.8,9434894.4,greedy_custom_flops

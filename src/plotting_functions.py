@@ -477,7 +477,7 @@ def plot_tensor_sparsity_distribution(
     # Set a cutoff value for sparsity to avoid log2(0)
     eps = 1e-6
     df["log2_sparsity"] = np.round(
-        np.log2(np.maximum(df["avg_tensor_sparsity"], eps))
+        np.log2(np.maximum(df["tensor_sparsity"], eps))
     ).astype(int)
 
     global_min = int(df["log2_sparsity"].min())
@@ -518,7 +518,7 @@ def plot_tensor_sparsity_distribution(
         else:
             label_str = f"mean = {val_actual:.2f}"
 
-        if rep == "BB Tanner" or rep == "Hamming Tanner":
+        if rep == "BB Tanner":
             x = closest_idx + 5
         else:
             x = closest_idx - 5
@@ -693,18 +693,18 @@ def plot_log_tensor_size_vs_open_legs(data, out_file="tensor_size_vs_open_legs.p
         ax.scatter(
             family_data["num_open_legs"],
             family_data["log4_actual_size"],
-            label=family,
+            label=RENAME_MAP.get(family, family),
             color=colors[idx],
             marker="o",
             alpha=0.7,
             s=40,
         )
 
-    ax.set_xlabel("Number of Open Legs", fontsize=16)
-    ax.set_ylabel("log₄(Tensor Size)", fontsize=16)
+    ax.set_xlabel("Number of Open Legs", fontsize=18)
+    ax.set_ylabel("log₄(Tensor Size)", fontsize=18)
     ax.grid(True, alpha=0.3)
-    ax.legend(loc="upper left", fontsize=12)
-    ax.tick_params(axis="both", which="major", labelsize=14)
+    ax.legend(loc="upper left", fontsize=14)
+    ax.tick_params(axis="both", which="major", labelsize=16)
 
     plt.tight_layout()
     plt.savefig(out_file, format="pdf", dpi=500)
