@@ -34,7 +34,7 @@ The command line arguments for this script are:
 
 To gather the same data as shown in the paper, run the following command:
 ```bash
-python src/contraction_cost_calculations.py --file_name "contraction_costs.csv" --num_runs 100 --max-repeats 64 --sparsity_collection
+python src/contraction_cost_calculations.py --file_name "contraction_costs.csv" --num_runs 100 --max_repeats 64 --sparsity_collection
 ```
 
 ### WEP Contraction Costs (Scatter Plot)
