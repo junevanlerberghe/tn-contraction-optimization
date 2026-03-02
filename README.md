@@ -29,12 +29,12 @@ The command line arguments for this script are:
 | `--methods` | `str` (list) | `["greedy", "kahypar"]` | List of contraction path optimization methods to run. Options: `greedy`, `kahypar`. |
 | `--codes` | `str` (list) | `["concatenated", "rotated", "rotated_msp", "rotated_tanner", "hamming_msp", "hamming_tanner", "holo", "bb_msp", "bb_tanner"]` | Tensor network codes to test. Each corresponds to a different network topology. |
 | `--max_time` | `int` | `None` | Maximum runtime per code (in seconds). |
-| `--max_repeats` | `int` | `128` | Maximum number of trials Cotengra can perform per network before stopping. |
+| `--max_repeats` | `int` | `64` | Maximum number of trials Cotengra can perform per network before stopping. |
 | `--sparsity_collection` | *(flag)* | `False` | When set, the script collects **tensor sparsity statistics** in addition to contraction cost data. |
 
 To gather the same data as shown in the paper, run the following command:
 ```bash
-python src/contraction_cost_calculations.py --file_name "contraction_costs.csv" --num_runs 100 --sparsity_collection
+python src/contraction_cost_calculations.py --file_name "contraction_costs.csv" --num_runs 100 --max-repeats 64 --sparsity_collection
 ```
 
 ### WEP Contraction Costs (Scatter Plot)
